@@ -125,3 +125,31 @@ class SceneTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DroneCountTest(unittest.TestCase):
+    def test_switch_single_dual(self):
+        from rmtt_sim.simulator import Simulator
+        sim = Simulator(["10.0.0.1", "10.0.0.2", "10.0.0.3"], scene="empty", udp=False, count=1)
+        try:
+            self.assertEqual(len(sim.drones), 1)
+            self.assertEqual(sim.drones[0].peers, [])
+            self.assertEqual(sim.set_drone_count(2), 2)
+            d0, d1 = sim.drones
+            self.assertEqual((d1.index, d1.ip), (1, "10.0.0.2"))
+            self.assertEqual(d0.peers, [d1])
+            self.assertAlmostEqual(d1.pos[1], 100, delta=0.01)   # 新飞机在起飞点左侧 1m
+            # 切回单机：正在执行的动作收到 error Interrupted
+            out = []
+            d1.handle("takeoff", out.append)
+            self.assertEqual(sim.set_drone_count(1), 1)
+            self.assertEqual(out, ["error Interrupted"])
+            self.assertEqual(sim.drones, [d0])
+            self.assertEqual(d0.peers, [])
+            self.assertEqual(sim.snapshot()["max_drones"], 3)
+            with self.assertRaises(ValueError):
+                sim.set_drone_count(4)
+            with self.assertRaises(ValueError):
+                sim.set_drone_count(0)
+        finally:
+            sim.shutdown()

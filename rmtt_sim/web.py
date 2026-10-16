@@ -117,6 +117,8 @@ def make_handler(sim):
                 elif path == "/api/pause":
                     with sim.lock:
                         sim.paused = bool(data["paused"])
+                elif path == "/api/drones":
+                    return self._json({"ok": True, "count": sim.set_drone_count(data["count"])})
                 elif path == "/api/battery":
                     with sim.lock:
                         for d in sim.drones:

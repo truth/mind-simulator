@@ -48,20 +48,21 @@ class UdpEndpoint:
     def __init__(self, sim, drone, ip, port=CMD_PORT):
         self.sim, self.drone = sim, drone
         self.client = None
+        self.closed = False
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind((ip, port))
         self.self_addr = (ip, port)
         threading.Thread(target=self._recv_loop, daemon=True, name="udp-%s:%d" % (ip, port)).start()
 
     def _recv_loop(self):
-        while self.sim.running:
+        while self.sim.running and not self.closed:
             try:
                 data, addr = self.sock.recvfrom(2048)
             except ConnectionResetError:
                 # Windows：上次发送的目标端口不可达时，下一次 recvfrom 会抛出该异常，忽略
                 continue
             except OSError:
-                if not self.sim.running:
+                if self.closed or not self.sim.running:
                     return
                 continue
             if addr == self.self_addr:
@@ -98,6 +99,7 @@ class UdpEndpoint:
                 pass
 
     def close(self):
+        self.closed = True
         try:
             self.sock.close()
         except OSError:
@@ -105,7 +107,9 @@ class UdpEndpoint:
 
 
 class Simulator:
-    def __init__(self, ips, scene="empty", udp=True, auto_land=0.0, lan_ips=(), library=None):
+    def __init__(self, ips, scene="empty", udp=True, auto_land=0.0, lan_ips=(), library=None, count=None):
+        """ips 为飞机地址池（第 i 架使用 ips[i]），count 为初始飞机数量（默认用满地址池）。
+        运行中可通过 set_drone_count 在 1 ~ len(ips) 之间切换（单机 / 双机 …）。"""
         self.lock = threading.RLock()
         self.running = True
         self.time_scale = 1.0
@@ -116,27 +120,76 @@ class Simulator:
         self.library = library or SceneLibrary()
         content, builtin = self.library.load(scene)
         self.world = World(content, scene_id=scene, builtin=builtin)
+        self.ip_pool = list(ips)
+        self.udp = udp
+        self.auto_land = auto_land
+        self.lan_ips = list(lan_ips)
         self.drones = []
-        for i, ip in enumerate(ips):
-            d = Drone(i, ip, self.world, self.log)
-            d.auto_land_timeout = auto_land
-            self.drones.append(d)
-        for d in self.drones:
-            d.peers = [o for o in self.drones if o is not d]
-        self.endpoints = [UdpEndpoint(self, d, d.ip) for d in self.drones] if udp else []
+        self.endpoints = []
         self.lan_endpoints = []  # [(drone_index, ip, port)]
-        if udp:
-            for ip in lan_ips:
-                for d in self.drones:
-                    try:
-                        self.endpoints.append(UdpEndpoint(self, d, ip, lan_port(d.index)))
-                    except OSError as e:
-                        print("  [提示] 无法绑定局域网地址 %s:%d（%s），已跳过" % (ip, lan_port(d.index), e))
-                        continue
-                    self.lan_endpoints.append((d.index, ip, lan_port(d.index)))
+        for _ in range(count or len(self.ip_pool)):
+            self._add_drone()
         threading.Thread(target=self._sim_loop, daemon=True, name="sim").start()
         if udp:
             threading.Thread(target=self._state_loop, daemon=True, name="state").start()
+
+    # ---- 飞机增减 ----
+    def _add_drone(self):
+        """新增一架飞机并绑定它的 UDP 端点。主地址绑定失败时抛 OSError（不留下半成品）。"""
+        i = len(self.drones)
+        d = Drone(i, self.ip_pool[i], self.world, self.log)
+        d.auto_land_timeout = self.auto_land
+        eps, lan = [], []
+        if self.udp:
+            eps.append(UdpEndpoint(self, d, d.ip))
+            for ip in self.lan_ips:
+                try:
+                    eps.append(UdpEndpoint(self, d, ip, lan_port(i)))
+                except OSError as e:
+                    print("  [提示] 无法绑定局域网地址 %s:%d（%s），已跳过" % (ip, lan_port(i), e))
+                    continue
+                lan.append((i, ip, lan_port(i)))
+        self.drones.append(d)
+        self.endpoints += eps
+        self.lan_endpoints += lan
+        self._link_peers()
+
+    def _remove_last_drone(self):
+        d = self.drones.pop()
+        if d.task and d.task["reply"]:
+            d.task["reply"]("error Interrupted")
+        d.task = None
+        for ep in [e for e in self.endpoints if e.drone is d]:
+            ep.close()
+            self.endpoints.remove(ep)
+        self.lan_endpoints = [x for x in self.lan_endpoints if x[0] != d.index]
+        self._link_peers()
+
+    def _link_peers(self):
+        for d in self.drones:
+            d.peers = [o for o in self.drones if o is not d]
+
+    def set_drone_count(self, n):
+        """运行中切换飞机数量（1 = 单机，2 = 双机 …）。"""
+        n = int(n)
+        if not 1 <= n <= len(self.ip_pool):
+            raise ValueError("飞机数量需在 1 ~ %d 之间" % len(self.ip_pool))
+        with self.lock:
+            before = len(self.drones)
+            while len(self.drones) > n:
+                self._remove_last_drone()
+            while len(self.drones) < n:
+                ip = self.ip_pool[len(self.drones)]
+                try:
+                    self._add_drone()
+                except OSError as e:
+                    raise ValueError("无法绑定 %s:%d（%s）。请运行 tools\\setup_network.ps1 后重试"
+                                     % (ip, CMD_PORT, e))
+            after = len(self.drones)
+        if after != before:
+            mode = {1: "单机", 2: "双机"}.get(after, "%d 架" % after)
+            self.log(0, "info", "已切换为%s模式（%d → %d 架）" % (mode, before, after))
+        return after
 
     # ---- 日志 ----
     def log(self, drone_index, kind, text):
@@ -178,6 +231,7 @@ class Simulator:
         with self.lock:
             return {"t": time.time(), "time_scale": self.time_scale, "paused": self.paused,
                     "world_version": self.world.version, "reset_id": self.reset_id,
+                    "max_drones": len(self.ip_pool),
                     "drones": [d.to_dict() for d in self.drones],
                     "lan": [{"drone": i, "addr": "%s:%d" % (ip, port)} for i, ip, port in self.lan_endpoints
                             if ip != "127.0.0.1"]}

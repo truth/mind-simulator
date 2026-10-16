@@ -15,9 +15,9 @@ def main():
     sys.stdout.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
     p = argparse.ArgumentParser(prog="rmtt_sim", description="RoboMaster TT 模拟器（兼容 Mind+ 实时模式）")
     p.add_argument("--ip", action="append",
-                   help="飞机 UDP 绑定地址，可重复指定多次模拟多架飞机（默认 192.168.10.1）")
-    p.add_argument("--drones", type=int, default=1,
-                   help="模拟飞机数量：#1 为 192.168.10.1，#2 起为 192.168.10.11、.12 …（与 setup_network.ps1 一致）")
+                   help="飞机 UDP 地址池，可重复指定（默认 192.168.10.1、.11、.12、.13，与 setup_network.ps1 一致）")
+    p.add_argument("--drones", type=int, default=None,
+                   help="启动时的飞机数量（默认 1；指定 --ip 时默认用满地址池）。运行中可在网页上切换单机 / 双机")
     p.add_argument("--scene", default="pads",
                    help="初始场景 id（scenes/builtin 或 scenes/user 下的文件名，默认 pads）")
     p.add_argument("--web-host", default="127.0.0.1")
@@ -28,7 +28,10 @@ def main():
                    help="不在局域网地址上监听（默认监听，供手机 App 连接）")
     p.add_argument("--no-browser", action="store_true", help="不自动打开浏览器")
     args = p.parse_args()
-    ips = args.ip or ["192.168.10.1"] + ["192.168.10.%d" % (9 + i) for i in range(2, args.drones + 1)]
+    count = args.drones or (len(args.ip) if args.ip else 1)
+    ips = args.ip or ["192.168.10.1"] + ["192.168.10.%d" % (9 + i) for i in range(2, max(4, count) + 1)]
+    if not 1 <= count <= len(ips):
+        p.error("--drones 需在 1 ~ %d 之间" % len(ips))
 
     print("RoboMaster TT 模拟器 v%s" % __version__)
     library = SceneLibrary()
@@ -37,7 +40,7 @@ def main():
         print("[错误] 场景「%s」不存在，可用：%s" % (args.scene, ", ".join(ids)))
         sys.exit(1)
     try:
-        sim = Simulator(ips, scene=args.scene, auto_land=args.auto_land, library=library,
+        sim = Simulator(ips, scene=args.scene, auto_land=args.auto_land, library=library, count=count,
                         lan_ips=[] if args.no_lan else detect_lan_ips())
     except OSError as e:
         print("\n[错误] 无法绑定 UDP 地址 %s:%d —— %s" % (", ".join(ips), CMD_PORT, e))
@@ -58,7 +61,7 @@ def main():
             print("  飞机 #%d  Android 模拟器请填 10.0.2.2:%d" % (i + 1, port))
         else:
             print("  飞机 #%d  手机 App 请填 %s:%d" % (i + 1, ip, port))
-    print("  3D 界面  %s" % url)
+    print("  3D 界面  %s（顶部「飞机」可随时切换单机 / 双机）" % url)
     print("在 Mind+ 实时模式中加载「RoboMaster TT（单机）」扩展并连接即可。Ctrl+C 退出。\n")
     if not args.no_browser:
         webbrowser.open(url)

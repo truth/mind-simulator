@@ -76,6 +76,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rmtt.controller.DroneViewModel
@@ -192,7 +195,7 @@ fun MainScreen(vm: DroneViewModel) {
         }
         Column(Modifier.weight(1f).fillMaxHeight()) {
             StatusBar(vm)
-            Box(Modifier.weight(1f).fillMaxWidth().padding(8.dp)) {
+            Box(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
                 when (tab) {
                     0 -> FlightTab(vm)
                     1 -> CommandTab(vm)
@@ -215,23 +218,25 @@ private fun StatusBar(vm: DroneViewModel) {
         }
     }
     val fresh = s.fresh(now)
+    // 单行：指示灯、编号、地址 + SN（执行中显示指令）、读数，尽量少占竖向空间
     Row(
-        Modifier.fillMaxWidth().background(Panel).padding(horizontal = 12.dp, vertical = 4.dp),
+        Modifier.fillMaxWidth().background(Panel).padding(horizontal = 10.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Box(Modifier.size(9.dp).clip(CircleShape).background(if (fresh) Ok else Color(0xFFF3A712)))
+        Box(Modifier.size(8.dp).clip(CircleShape).background(if (fresh) Ok else Color(0xFFF3A712)))
         if (vm.droneNumber > 0 && vm.host.contains(':')) {
-            Box(Modifier.clip(RoundedCornerShape(4.dp)).background(Orange).padding(horizontal = 6.dp)) {
-                Text("#${vm.droneNumber}", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+            Box(Modifier.clip(RoundedCornerShape(3.dp)).background(Orange).padding(horizontal = 4.dp)) {
+                Text("#${vm.droneNumber}", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                    maxLines = 1, lineHeight = 14.sp)
             }
         }
-        // 第一行地址；第二行显示正在执行的指令（优先）或 SN
-        Column(Modifier.widthIn(max = 170.dp)) {
-            Text(vm.client.targetAddress ?: "", fontSize = 12.sp, color = Muted, maxLines = 1, softWrap = false)
+        Row(Modifier.widthIn(max = 230.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(vm.client.targetAddress ?: "", fontSize = 11.sp, color = Muted, maxLines = 1, softWrap = false)
+            Spacer(Modifier.width(6.dp))
             Text(
-                busy?.let { "▶ $it" } ?: vm.serial?.let { "SN $it" } ?: "",
-                fontSize = 10.sp, color = if (busy != null) Accent else Muted, maxLines = 1,
+                busy?.let { "▶ $it" } ?: vm.serial?.let { "SN…${it.takeLast(5)}" } ?: "",
+                fontSize = 11.sp, color = if (busy != null) Accent else Muted, maxLines = 1,
                 overflow = TextOverflow.Ellipsis, fontFamily = FontFamily.Monospace,
             )
         }
@@ -248,7 +253,7 @@ private fun StatusBar(vm: DroneViewModel) {
                 Stat("温度", "${s.tempHigh}℃")
                 Stat("卡", if (s.mid > 0) "m${s.mid}" else "-")
             } else {
-                Text("未收到 8890 状态推送", fontSize = 12.sp, color = Color(0xFFF3A712), maxLines = 1)
+                Text("未收到 8890 状态推送", fontSize = 11.sp, color = Color(0xFFF3A712), maxLines = 1)
             }
         }
     }
@@ -257,10 +262,10 @@ private fun StatusBar(vm: DroneViewModel) {
 @Composable
 private fun Stat(label: String, value: String, color: Color? = null) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(label, fontSize = 11.sp, color = Muted, maxLines = 1, softWrap = false)
+        Text(label, fontSize = 10.sp, color = Muted, maxLines = 1, softWrap = false)
         Spacer(Modifier.width(3.dp))
         Text(
-            value, fontSize = 13.sp, fontFamily = FontFamily.Monospace, maxLines = 1, softWrap = false,
+            value, fontSize = 12.sp, fontFamily = FontFamily.Monospace, maxLines = 1, softWrap = false,
             color = color ?: MaterialTheme.colorScheme.onSurface,
         )
     }
@@ -274,46 +279,49 @@ private fun FlightTab(vm: DroneViewModel) {
         Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
             Joystick(Modifier.fillMaxHeight(0.96f), "上升", "下降", "左转", "右转", vm::setLeftStick)
         }
-        Column(
-            Modifier.width(230.dp).fillMaxHeight().verticalScroll(rememberScrollState()),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterVertically),
-        ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Button(onClick = { vm.cmd("takeoff") }, Modifier.weight(1f)) { Text("起飞") }
-                Button(onClick = { vm.urgent("land") }, Modifier.weight(1f)) { Text("降落") }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                FilledTonalButton(onClick = { vm.urgent("stop") }, Modifier.weight(1f)) { Text("悬停") }
-                Button(
-                    onClick = { vm.urgent("emergency") }, Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(containerColor = Danger),
-                ) { Text("急停") }
-            }
-            Text("翻滚", fontSize = 12.sp, color = Muted)
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                listOf("前" to "f", "后" to "b", "左" to "l", "右" to "r").forEach { (t, d) ->
-                    OutlinedButton(
-                        onClick = { vm.cmd("flip $d") }, Modifier.weight(1f).height(36.dp),
-                        contentPadding = PaddingValues(0.dp),
-                    ) { Text(t) }
+        // 中间控制列：紧凑排列，横屏手机上无需滚动
+        CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
+            Column(
+                Modifier.width(230.dp).fillMaxHeight(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(5.dp, Alignment.CenterVertically),
+            ) {
+                val btn = Modifier.height(40.dp)
+                val pad = PaddingValues(horizontal = 8.dp)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Button(onClick = { vm.cmd("takeoff") }, btn.weight(1f), contentPadding = pad) { Text("起飞") }
+                    Button(onClick = { vm.urgent("land") }, btn.weight(1f), contentPadding = pad) { Text("降落") }
                 }
-            }
-            // 灵敏度标签与滑条同一行，节省竖向空间（横屏手机高度有限）
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("灵敏度 ${vm.stickPercent.roundToInt()}%", fontSize = 12.sp, color = Muted, maxLines = 1)
-                Slider(
-                    value = vm.stickPercent,
-                    onValueChange = { vm.stickPercent = it },
-                    onValueChangeFinished = { vm.saveStick() },
-                    valueRange = 10f..100f,
-                    modifier = Modifier.weight(1f).height(32.dp).padding(start = 6.dp),
-                )
-            }
-            if (vm.lastReply.isNotEmpty()) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    FilledTonalButton(onClick = { vm.urgent("stop") }, btn.weight(1f), contentPadding = pad) { Text("悬停") }
+                    Button(
+                        onClick = { vm.urgent("emergency") }, btn.weight(1f), contentPadding = pad,
+                        colors = ButtonDefaults.buttonColors(containerColor = Danger),
+                    ) { Text("急停") }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    listOf("前翻" to "f", "后翻" to "b", "左翻" to "l", "右翻" to "r").forEach { (t, d) ->
+                        OutlinedButton(
+                            onClick = { vm.cmd("flip $d") }, Modifier.weight(1f).height(34.dp),
+                            contentPadding = PaddingValues(0.dp),
+                        ) { Text(t, fontSize = 13.sp) }
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("灵敏度 ${vm.stickPercent.roundToInt()}%", fontSize = 12.sp, color = Muted, maxLines = 1)
+                    Slider(
+                        value = vm.stickPercent,
+                        onValueChange = { vm.stickPercent = it },
+                        onValueChangeFinished = { vm.saveStick() },
+                        valueRange = 10f..100f,
+                        modifier = Modifier.weight(1f).height(28.dp).padding(start = 6.dp),
+                    )
+                }
+                // 固定占位，避免出现回复时整列跳动
                 Text(
-                    vm.lastReply, fontSize = 11.sp, fontFamily = FontFamily.Monospace, maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                    vm.lastReply, Modifier.fillMaxWidth().height(16.dp),
+                    fontSize = 11.sp, fontFamily = FontFamily.Monospace, maxLines = 1,
+                    overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
                     color = if (vm.lastReply.contains("error")) Danger else Ok,
                 )
             }

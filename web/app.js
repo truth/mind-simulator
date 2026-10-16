@@ -310,9 +310,23 @@ function ledColor(led, t) {
   return [r1, g1, b1];
 }
 
+/** 移除一架飞机的全部 3D 对象（切换回单机时） */
+function disposeDrone(d) {
+  for (const obj of [d.root, d.blob, d.beam, d.trail]) {
+    scene.remove(obj);
+    obj.traverse((o) => {
+      if (o.geometry) o.geometry.dispose();
+      if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => m.dispose());
+    });
+  }
+}
+
 function syncDrones(list) {
   while (drones.length < list.length) drones.push(makeDrone(drones.length));
+  while (drones.length > list.length) disposeDrone(drones.pop());
+  if (selected >= list.length) selected = 0;
   const tabs = $('droneTabs');
+  if (list.length <= 1 && tabs.children.length) tabs.innerHTML = '';
   if (list.length > 1 && tabs.children.length !== list.length) {
     tabs.innerHTML = '';
     list.forEach((d, i) => {
@@ -534,6 +548,7 @@ function connect() {
     if (resetId !== null && data.reset_id !== resetId) drones.forEach(clearTrail);
     resetId = data.reset_id;
     syncDrones(data.drones);
+    syncDroneCount(data.drones.length, data.max_drones);
     appendLogs(data.logs);
     // 编辑器正在拖动 / 提交时不从服务器重载，避免打断操作
     if (data.world_version !== worldVersion && !editor.busy()) loadWorld();
@@ -580,6 +595,35 @@ $('editToggle').onclick = () => {
   $('dronePanel').hidden = on;
   $('editorPanel').hidden = !on;
   editor.setActive(on);
+};
+
+// 单机 / 双机切换
+const COUNT_NAMES = { 1: '单机', 2: '双机' };
+function syncDroneCount(n, max) {
+  const sel = $('droneCount');
+  if (sel.options.length !== max) {
+    sel.innerHTML = '';
+    for (let i = 1; i <= max; i++) sel.add(new Option(COUNT_NAMES[i] || `${i} 架`, String(i)));
+  }
+  if (document.activeElement !== sel && sel.value !== String(n)) sel.value = String(n);
+}
+$('droneCount').onchange = async (e) => {
+  const n = Number(e.target.value);
+  const current = latest ? latest.drones.length : 1;
+  if (n < current) {
+    const removed = latest.drones.slice(n).filter((d) => d.flying || d.client);
+    if (removed.length && !confirm(`将移除飞机 ${removed.map((d) => '#' + (d.index + 1)).join('、')}`
+        + `（${removed.some((d) => d.flying) ? '正在飞行' : '已有客户端连接'}），确定切换吗？`)) {
+      e.target.value = String(current);
+      return;
+    }
+  }
+  const r = await postFull('/api/drones', { count: n });
+  if (r.status !== 200) {
+    alert('切换失败：' + (r.data.error || r.status));
+    e.target.value = String(current);
+  }
+  e.target.blur();
 };
 
 $('scene').onchange = async (e) => {
