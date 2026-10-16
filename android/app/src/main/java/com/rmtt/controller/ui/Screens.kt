@@ -101,6 +101,7 @@ fun App(vm: DroneViewModel) {
 
 @Composable
 fun ConnectScreen(vm: DroneViewModel) {
+    LaunchedEffect(Unit) { if (!vm.discoverDone) vm.discover() }
     Box(Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
         Column(
             Modifier
@@ -123,6 +124,7 @@ fun ConnectScreen(vm: DroneViewModel) {
                 "使用 Tello SDK 3.0 协议，可连接电脑上的 TT 模拟器，也可连接真实的 RoboMaster TT / Tello EDU。",
                 color = Muted, fontSize = 13.sp,
             )
+            DiscoverySection(vm)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(
                     value = vm.host,
@@ -161,6 +163,58 @@ fun ConnectScreen(vm: DroneViewModel) {
                 color = Muted, fontSize = 12.sp, lineHeight = 18.sp,
             )
         }
+    }
+}
+
+/** 自动发现：列出局域网中的模拟器飞机，点击即连接 */
+@Composable
+private fun DiscoverySection(vm: DroneViewModel) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("局域网中的模拟器", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            if (vm.discovering) {
+                CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                Text("搜索中…", fontSize = 12.sp, color = Muted)
+            }
+            Spacer(Modifier.weight(1f))
+            TextButton(onClick = { vm.discover() }, enabled = !vm.discovering) { Text("🔍 重新搜索") }
+        }
+        if (!vm.discovering && vm.discoverDone && vm.found.isEmpty()) {
+            Text(
+                "未找到模拟器：请确认电脑已运行 start.bat、手机与电脑连接同一个 WiFi（访客网络 / AP 隔离会阻止搜索），也可以在下方手动输入地址。",
+                fontSize = 12.sp, color = Color(0xFFF3A712), lineHeight = 17.sp,
+            )
+        }
+        vm.found.forEach { d ->
+            val busy = d.client != null
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Color(0xFF1F2832))
+                    .border(1.dp, Border, RoundedCornerShape(8.dp))
+                    .clickable(enabled = !vm.connecting) { vm.connectTo(d) }
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Box(Modifier.clip(RoundedCornerShape(4.dp)).background(droneColor(d.number)).padding(horizontal = 6.dp)) {
+                    Text("#${d.number}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                }
+                Column(Modifier.weight(1f)) {
+                    Text(d.computer, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text("${d.address}  SN…${d.sn.takeLast(5)}", fontSize = 11.sp, color = Muted, maxLines = 1)
+                }
+                Text(
+                    when {
+                        d.client == "pc" -> "电脑在用"
+                        busy -> "已被 ${d.client} 连接"
+                        d.flying -> "空闲 · 飞行中"
+                        else -> "空闲"
+                    },
+                    fontSize = 12.sp, color = if (busy) Color(0xFFF3A712) else Ok, maxLines = 1,
+                )
+                Text("连接 ›", fontSize = 13.sp, color = Accent)
+            }
+        }
+        Text("或手动输入地址：", fontSize = 12.sp, color = Muted)
     }
 }
 

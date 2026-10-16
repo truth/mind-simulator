@@ -12,6 +12,8 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.rmtt.controller.net.DEFAULT_CMD_PORT
+import com.rmtt.controller.net.Discovery
+import com.rmtt.controller.net.FoundDrone
 import com.rmtt.controller.net.TelloClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -32,6 +34,31 @@ class DroneViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var connectError by mutableStateOf<String?>(null)
         private set
+
+    // ---- 自动发现 ----
+    val found = mutableStateListOf<FoundDrone>()
+    var discovering by mutableStateOf(false)
+        private set
+    var discoverDone by mutableStateOf(false)
+        private set
+
+    /** 在局域网中广播搜索模拟器（约 1.5 秒） */
+    fun discover() {
+        if (discovering) return
+        discovering = true
+        viewModelScope.launch {
+            val r = runCatching { Discovery.search(socketBinder = ::bindToWifi) }.getOrDefault(emptyList())
+            found.clear()
+            found.addAll(r)
+            discovering = false
+            discoverDone = true
+        }
+    }
+
+    fun connectTo(d: FoundDrone) {
+        host = d.address
+        connect()
+    }
 
     /** 连接后查询到的飞机序列号，用于确认控制的是哪一架 */
     var serial by mutableStateOf<String?>(null)

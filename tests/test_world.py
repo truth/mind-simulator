@@ -153,3 +153,44 @@ class DroneCountTest(unittest.TestCase):
                 sim.set_drone_count(0)
         finally:
             sim.shutdown()
+
+
+class DiscoveryTest(unittest.TestCase):
+    def test_discover_lists_drones_and_clients(self):
+        import socket
+        from rmtt_sim.discovery import DiscoveryResponder
+        from rmtt_sim.simulator import Simulator
+        sim = Simulator(["127.0.0.2", "127.0.0.3"], scene="empty", lan_ips=["127.0.0.5"], count=2)
+        disc = DiscoveryResponder(sim, port=0)
+        port = disc.sock.getsockname()[1]
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.settimeout(3)
+
+        def ask():
+            s.sendto(b"RMTT-DISCOVER 1", ("127.0.0.1", port))
+            return s.recvfrom(2048)[0].decode().splitlines()
+
+        try:
+            lines = ask()
+            self.assertEqual(lines[0], "RMTT-SIM 1")
+            self.assertIn("ips=127.0.0.5", lines)
+            drones = [l for l in lines if l.startswith("drone=")]
+            self.assertEqual(drones[0], "drone=1;port=8889;sn=0TQZK7SIM00001;flying=0;client=-")
+            self.assertTrue(drones[1].startswith("drone=2;port=8989;sn=0TQZK7SIM00002;"))
+            # 客户端连上 #2 后，发现结果显示其已被占用
+            c = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            c.settimeout(3)
+            c.sendto(b"command", ("127.0.0.5", 8989))
+            self.assertEqual(c.recvfrom(64)[0], b"ok")
+            c.close()
+            d2 = [l for l in ask() if l.startswith("drone=2")][0]
+            self.assertNotIn("client=-", d2)
+            # 非发现请求不回复
+            s.sendto(b"hello", ("127.0.0.1", port))
+            with self.assertRaises(socket.timeout):
+                s.settimeout(0.5)
+                s.recvfrom(2048)
+        finally:
+            s.close()
+            disc.close()
+            sim.shutdown()

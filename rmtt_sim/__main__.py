@@ -6,6 +6,7 @@ import time
 import webbrowser
 
 from . import __version__
+from .discovery import DISCOVERY_PORT, DiscoveryResponder
 from .simulator import CMD_PORT, Simulator, detect_lan_ips
 from .web import serve
 from .scenes import SceneLibrary
@@ -53,6 +54,12 @@ def main():
     except OSError as e:
         print("[错误] Web 端口 %d 被占用：%s（可用 --web-port 更换）" % (args.web_port, e))
         sys.exit(1)
+    discovery = None
+    if not args.no_lan:
+        try:
+            discovery = DiscoveryResponder(sim)
+        except OSError as e:
+            print("  [提示] 自动发现端口 UDP %d 被占用（%s），手机 App 需手动输入地址" % (DISCOVERY_PORT, e))
     url = "http://%s:%d/" % ("127.0.0.1" if args.web_host == "0.0.0.0" else args.web_host, args.web_port)
     for d in sim.drones:
         print("  飞机 #%d  UDP %s:%d  SN=%s" % (d.index + 1, d.ip, CMD_PORT, d.sn))
@@ -61,6 +68,8 @@ def main():
             print("  飞机 #%d  Android 模拟器请填 10.0.2.2:%d" % (i + 1, port))
         else:
             print("  飞机 #%d  手机 App 请填 %s:%d" % (i + 1, ip, port))
+    if discovery:
+        print("  自动发现 UDP %d 已开启：手机 App 连接页点「搜索模拟器」即可找到本机" % DISCOVERY_PORT)
     print("  3D 界面  %s（顶部「飞机」可随时切换单机 / 双机）" % url)
     print("在 Mind+ 实时模式中加载「RoboMaster TT（单机）」扩展并连接即可。Ctrl+C 退出。\n")
     if not args.no_browser:
@@ -69,6 +78,8 @@ def main():
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
+        if discovery:
+            discovery.close()
         sim.shutdown()
 
 

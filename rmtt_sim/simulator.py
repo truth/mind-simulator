@@ -48,6 +48,7 @@ class UdpEndpoint:
     def __init__(self, sim, drone, ip, port=CMD_PORT):
         self.sim, self.drone = sim, drone
         self.client = None
+        self.last_rx = 0.0  # 最近一次收到客户端数据的时间（自动发现用来判断飞机是否已被占用）
         self.closed = False
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind((ip, port))
@@ -71,6 +72,7 @@ class UdpEndpoint:
             if not text:
                 continue
             reply = self._make_reply(addr)
+            self.last_rx = time.time()
             with self.sim.lock:
                 d = self.drone
                 if self.client != addr:

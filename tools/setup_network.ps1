@@ -46,6 +46,7 @@ if ($Remove) {
   $all = @($client, '192.168.10.1') + (11..30 | ForEach-Object { "192.168.10.$_" })
   foreach ($ip in $all) { Remove-SimIp $ip }
   Get-NetFirewallRule -DisplayName 'RoboMaster TT Simulator (UDP)' -ErrorAction SilentlyContinue | Remove-NetFirewallRule
+  Get-NetFirewallRule -DisplayName 'RoboMaster TT Simulator Discovery (UDP 8899)' -ErrorAction SilentlyContinue | Remove-NetFirewallRule
   Write-Host '已移除模拟器虚拟地址。' -ForegroundColor Green
   exit
 }
@@ -75,6 +76,11 @@ $ruleName = 'RoboMaster TT Simulator (UDP)'
 Get-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue | Remove-NetFirewallRule
 New-NetFirewallRule -DisplayName $ruleName -Direction Inbound -Protocol UDP -LocalPort $ports -Action Allow -Profile Any | Out-Null
 Write-Host "已添加防火墙入站规则：UDP $($ports -join ', ')" -ForegroundColor Green
+# 自动发现：手机 App 广播搜索模拟器
+$discoveryRule = 'RoboMaster TT Simulator Discovery (UDP 8899)'
+Get-NetFirewallRule -DisplayName $discoveryRule -ErrorAction SilentlyContinue | Remove-NetFirewallRule
+New-NetFirewallRule -DisplayName $discoveryRule -Direction Inbound -Protocol UDP -LocalPort 8899 -Action Allow -Profile Any | Out-Null
+Write-Host '已添加防火墙入站规则：UDP 8899（自动发现）' -ForegroundColor Green
 
 # 先添加客户端地址，保证它成为 192.168.10.0/24 的首选源地址
 Add-SimIp $client $false
