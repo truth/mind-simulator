@@ -1,0 +1,67 @@
+"""命令行入口：python -m rmtt_sim"""
+
+import argparse
+import sys
+import time
+import webbrowser
+
+from . import __version__
+from .simulator import CMD_PORT, Simulator, detect_lan_ips
+from .web import serve
+from .world import SCENES
+
+
+def main():
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
+    p = argparse.ArgumentParser(prog="rmtt_sim", description="RoboMaster TT 模拟器（兼容 Mind+ 实时模式）")
+    p.add_argument("--ip", action="append",
+                   help="飞机 UDP 绑定地址，可重复指定多次模拟多架飞机（默认 192.168.10.1）")
+    p.add_argument("--drones", type=int, default=1,
+                   help="模拟飞机数量：#1 为 192.168.10.1，#2 起为 192.168.10.11、.12 …（与 setup_network.ps1 一致）")
+    p.add_argument("--scene", default="pads", choices=sorted(SCENES), help="初始场景（默认 pads）")
+    p.add_argument("--web-host", default="127.0.0.1")
+    p.add_argument("--web-port", type=int, default=8080)
+    p.add_argument("--auto-land", type=float, default=0.0,
+                   help="超过 N 秒未收到指令自动降落（真机为 15 秒，默认关闭）")
+    p.add_argument("--no-lan", action="store_true",
+                   help="不在局域网地址上监听（默认监听，供手机 App 连接）")
+    p.add_argument("--no-browser", action="store_true", help="不自动打开浏览器")
+    args = p.parse_args()
+    ips = args.ip or ["192.168.10.1"] + ["192.168.10.%d" % (9 + i) for i in range(2, args.drones + 1)]
+
+    print("RoboMaster TT 模拟器 v%s" % __version__)
+    try:
+        sim = Simulator(ips, scene=args.scene, auto_land=args.auto_land,
+                        lan_ips=[] if args.no_lan else detect_lan_ips())
+    except OSError as e:
+        print("\n[错误] 无法绑定 UDP 地址 %s:%d —— %s" % (", ".join(ips), CMD_PORT, e))
+        print("请先以管理员身份运行 tools\\setup_network.ps1 为本机添加 192.168.10.1 地址，")
+        print("或检查是否已有另一个模拟器实例在运行。")
+        sys.exit(1)
+
+    try:
+        serve(sim, args.web_host, args.web_port)
+    except OSError as e:
+        print("[错误] Web 端口 %d 被占用：%s（可用 --web-port 更换）" % (args.web_port, e))
+        sys.exit(1)
+    url = "http://%s:%d/" % ("127.0.0.1" if args.web_host == "0.0.0.0" else args.web_host, args.web_port)
+    for d in sim.drones:
+        print("  飞机 #%d  UDP %s:%d  SN=%s" % (d.index + 1, d.ip, CMD_PORT, d.sn))
+    for i, ip, port in sim.lan_endpoints:
+        if ip == "127.0.0.1":
+            print("  飞机 #%d  Android 模拟器请填 10.0.2.2:%d" % (i + 1, port))
+        else:
+            print("  飞机 #%d  手机 App 请填 %s:%d" % (i + 1, ip, port))
+    print("  3D 界面  %s" % url)
+    print("在 Mind+ 实时模式中加载「RoboMaster TT（单机）」扩展并连接即可。Ctrl+C 退出。\n")
+    if not args.no_browser:
+        webbrowser.open(url)
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        sim.shutdown()
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,74 @@
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: #0f1419; color: #d8dee6;
+  font: 13px/1.4 "Segoe UI", "Microsoft YaHei", sans-serif; }
+header { height: 48px; display: flex; align-items: center; gap: 16px; padding: 0 14px;
+  background: #161d25; border-bottom: 1px solid #253040; }
+.brand { font-weight: 600; font-size: 15px; white-space: nowrap; }
+.brand small { color: #7d8b9c; font-weight: 400; margin-left: 6px; }
+.logo { display: inline-block; background: #e4572e; color: #fff; border-radius: 4px;
+  padding: 1px 5px; margin-right: 4px; font-size: 12px; }
+.toolbar { display: flex; align-items: center; gap: 10px; flex: 1; flex-wrap: wrap; }
+.toolbar label { color: #9aa7b6; }
+.chk { display: flex; align-items: center; gap: 3px; cursor: pointer; }
+select, button, input { font: inherit; color: #d8dee6; background: #1f2832;
+  border: 1px solid #33414f; border-radius: 4px; padding: 3px 8px; }
+button { cursor: pointer; }
+button:hover { background: #2a3644; }
+button.danger { border-color: #a03030; color: #ff8a8a; }
+.seg { display: flex; }
+.seg button { border-radius: 0; margin-left: -1px; }
+.seg button:first-child { border-radius: 4px 0 0 4px; }
+.seg button:last-child { border-radius: 0 4px 4px 0; }
+.seg button.active { background: #2f6fde; border-color: #2f6fde; color: #fff; }
+.badge { padding: 3px 10px; border-radius: 10px; font-size: 12px; white-space: nowrap; }
+.badge.on { background: #1e5631; color: #9be7b0; }
+.badge.off { background: #5a1e1e; color: #ffb0b0; }
+
+main { position: absolute; top: 48px; bottom: 0; left: 0; right: 0; display: flex; }
+#viewport { position: relative; flex: 1; overflow: hidden; }
+#scene3d { width: 100%; height: 100%; display: block; outline: none; }
+#pip { position: absolute; left: 12px; bottom: 12px; border: 2px solid #33414f; border-radius: 6px;
+  overflow: hidden; background: #000; width: 320px; height: 180px; }
+#pip canvas { display: block; width: 100%; height: 100%; }
+#pipLabel { position: absolute; left: 6px; top: 4px; font-size: 11px; color: #fff;
+  text-shadow: 0 0 3px #000; }
+#hud { position: absolute; left: 12px; top: 10px; font: 12px/1.5 Consolas, monospace;
+  background: rgba(10, 14, 19, .65); padding: 6px 10px; border-radius: 6px; pointer-events: none;
+  white-space: pre; }
+#hint { position: absolute; right: 12px; bottom: 10px; color: #7d8b9c; font-size: 12px; pointer-events: none; }
+
+aside { width: 360px; overflow-y: auto; background: #131a21; border-left: 1px solid #253040;
+  padding: 10px; display: flex; flex-direction: column; gap: 10px; }
+.tabs { display: flex; gap: 4px; }
+.tabs:empty { display: none; }
+.tabs button.active { background: #2f6fde; border-color: #2f6fde; color: #fff; }
+.card { background: #18212b; border: 1px solid #253040; border-radius: 8px; padding: 10px 12px; }
+.card h3 { margin: 0 0 8px; font-size: 13px; color: #9fc3ff; }
+.card h3 small { color: #6e7c8c; font-weight: 400; }
+.kv { display: flex; justify-content: space-between; padding: 2px 0; }
+.kv span, .grid span { color: #7d8b9c; }
+.kv b { font-weight: 500; text-align: right; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; }
+.grid div { display: flex; justify-content: space-between; }
+.grid b { font-weight: 500; font-family: Consolas, monospace; }
+.ext { display: flex; gap: 14px; align-items: center; }
+#matrix2d { background: #0a0d10; border-radius: 6px; border: 1px solid #253040; }
+.ext-side { flex: 1; display: flex; flex-direction: column; gap: 16px; }
+.led-wrap { display: flex; align-items: center; gap: 10px; color: #7d8b9c; }
+#led2d { width: 34px; height: 34px; border-radius: 50%; background: #000; border: 2px solid #33414f; }
+.tof span { color: #7d8b9c; margin-right: 8px; }
+.tof b { font-family: Consolas, monospace; }
+.bar { height: 6px; background: #0a0d10; border-radius: 3px; margin-top: 6px; overflow: hidden; }
+#tofBar { height: 100%; width: 0; background: linear-gradient(90deg, #e4572e, #f3a712, #2a9d8f); }
+.console { flex: 1; display: flex; flex-direction: column; min-height: 300px; }
+.quick { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+.quick button { padding: 2px 6px; font-size: 12px; }
+#cmdInput { width: 100%; margin-bottom: 6px; font-family: Consolas, monospace; }
+#log { flex: 1; overflow-y: auto; font: 12px/1.45 Consolas, "Microsoft YaHei", monospace;
+  background: #0d1217; border-radius: 4px; padding: 4px 6px; min-height: 160px; max-height: 360px; }
+#log .in { color: #8fd3ff; }
+#log .out { color: #9be7b0; }
+#log .out.err { color: #ff8a8a; }
+#log .warn { color: #f3c969; }
+#log .info { color: #8a96a3; }
+#log .t { color: #56616d; margin-right: 4px; }

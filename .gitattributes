@@ -1,0 +1,13 @@
+* text=auto
+# Unix 脚本必须保持 LF，Windows 脚本保持 CRLF
+gradlew text eol=lf
+*.sh text eol=lf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+# 二进制
+*.jar binary
+*.png binary
+*.apk binary
+*.jks binary
+# 第三方压缩代码：不参与 diff
+web/vendor/** -diff linguist-vendored
