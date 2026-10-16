@@ -75,6 +75,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rmtt.controller.DroneViewModel
@@ -215,45 +216,53 @@ private fun StatusBar(vm: DroneViewModel) {
     }
     val fresh = s.fresh(now)
     Row(
-        Modifier.fillMaxWidth().background(Panel).padding(horizontal = 12.dp, vertical = 6.dp),
+        Modifier.fillMaxWidth().background(Panel).padding(horizontal = 12.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Box(Modifier.size(9.dp).clip(CircleShape).background(if (fresh) Ok else Color(0xFFF3A712)))
         if (vm.droneNumber > 0 && vm.host.contains(':')) {
             Box(Modifier.clip(RoundedCornerShape(4.dp)).background(Orange).padding(horizontal = 6.dp)) {
-                Text("#${vm.droneNumber}", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                Text("#${vm.droneNumber}", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1)
             }
         }
-        Text(
-            listOfNotNull(vm.client.targetAddress, vm.serial?.let { "SN $it" }).joinToString("  "),
-            fontSize = 12.sp, color = Muted,
-        )
-        if (s.valid) {
-            Stat("电量", "${s.battery}%", if (s.battery < 20) Danger else if (s.battery < 50) Color(0xFFF3C969) else null)
-            Stat("高度", "${s.height}cm")
-            Stat("下视ToF", "${s.tof}cm")
-            Stat("航向", "${s.yaw}°")
-            Stat("温度", "${s.tempHigh}℃")
-            Stat("挑战卡", if (s.mid > 0) "m${s.mid}" else "-")
-        } else {
-            Text("未收到 8890 状态推送", fontSize = 12.sp, color = Color(0xFFF3A712))
+        // 第一行地址；第二行显示正在执行的指令（优先）或 SN
+        Column(Modifier.widthIn(max = 170.dp)) {
+            Text(vm.client.targetAddress ?: "", fontSize = 12.sp, color = Muted, maxLines = 1, softWrap = false)
+            Text(
+                busy?.let { "▶ $it" } ?: vm.serial?.let { "SN $it" } ?: "",
+                fontSize = 10.sp, color = if (busy != null) Accent else Muted, maxLines = 1,
+                overflow = TextOverflow.Ellipsis, fontFamily = FontFamily.Monospace,
+            )
         }
-        Spacer(Modifier.weight(1f))
-        Text(
-            busy?.let { "▶ $it" } ?: vm.lastReply,
-            fontSize = 12.sp, color = if (busy != null) Accent else Muted, maxLines = 1,
-            fontFamily = FontFamily.Monospace,
-        )
+        Row(
+            Modifier.weight(1f),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (s.valid) {
+                Stat("电量", "${s.battery}%", if (s.battery < 20) Danger else if (s.battery < 50) Color(0xFFF3C969) else null)
+                Stat("高度", "${s.height}cm")
+                Stat("ToF↓", "${s.tof}cm")
+                Stat("航向", "${s.yaw}°")
+                Stat("温度", "${s.tempHigh}℃")
+                Stat("卡", if (s.mid > 0) "m${s.mid}" else "-")
+            } else {
+                Text("未收到 8890 状态推送", fontSize = 12.sp, color = Color(0xFFF3A712), maxLines = 1)
+            }
+        }
     }
 }
 
 @Composable
 private fun Stat(label: String, value: String, color: Color? = null) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(label, fontSize = 11.sp, color = Muted)
-        Spacer(Modifier.width(4.dp))
-        Text(value, fontSize = 13.sp, fontFamily = FontFamily.Monospace, color = color ?: MaterialTheme.colorScheme.onSurface)
+        Text(label, fontSize = 11.sp, color = Muted, maxLines = 1, softWrap = false)
+        Spacer(Modifier.width(3.dp))
+        Text(
+            value, fontSize = 13.sp, fontFamily = FontFamily.Monospace, maxLines = 1, softWrap = false,
+            color = color ?: MaterialTheme.colorScheme.onSurface,
+        )
     }
 }
 
@@ -285,19 +294,29 @@ private fun FlightTab(vm: DroneViewModel) {
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 listOf("前" to "f", "后" to "b", "左" to "l", "右" to "r").forEach { (t, d) ->
                     OutlinedButton(
-                        onClick = { vm.cmd("flip $d") }, Modifier.weight(1f),
+                        onClick = { vm.cmd("flip $d") }, Modifier.weight(1f).height(36.dp),
                         contentPadding = PaddingValues(0.dp),
                     ) { Text(t) }
                 }
             }
-            Text("摇杆灵敏度 ${vm.stickPercent.roundToInt()}%", fontSize = 12.sp, color = Muted)
-            Slider(
-                value = vm.stickPercent,
-                onValueChange = { vm.stickPercent = it },
-                onValueChangeFinished = { vm.saveStick() },
-                valueRange = 10f..100f,
-            )
-            Text("左摇杆：油门 / 偏航　右摇杆：前后 / 左右", fontSize = 11.sp, color = Muted)
+            // 灵敏度标签与滑条同一行，节省竖向空间（横屏手机高度有限）
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("灵敏度 ${vm.stickPercent.roundToInt()}%", fontSize = 12.sp, color = Muted, maxLines = 1)
+                Slider(
+                    value = vm.stickPercent,
+                    onValueChange = { vm.stickPercent = it },
+                    onValueChangeFinished = { vm.saveStick() },
+                    valueRange = 10f..100f,
+                    modifier = Modifier.weight(1f).height(32.dp).padding(start = 6.dp),
+                )
+            }
+            if (vm.lastReply.isNotEmpty()) {
+                Text(
+                    vm.lastReply, fontSize = 11.sp, fontFamily = FontFamily.Monospace, maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    color = if (vm.lastReply.contains("error")) Danger else Ok,
+                )
+            }
         }
         Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
             Joystick(Modifier.fillMaxHeight(0.96f), "前进", "后退", "左移", "右移", vm::setRightStick)
