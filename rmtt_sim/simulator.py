@@ -187,8 +187,8 @@ class Simulator:
                                      % (ip, CMD_PORT, e))
             after = len(self.drones)
         if after != before:
-            mode = {1: "单机", 2: "双机"}.get(after, "%d 架" % after)
-            self.log(0, "info", "已切换为%s模式（%d → %d 架）" % (mode, before, after))
+            mode = {1: "单机模式", 2: "双机模式"}.get(after, "%d 架飞机" % after)
+            self.log(0, "info", "已切换为%s（%d → %d 架）" % (mode, before, after))
         return after
 
     # ---- 日志 ----

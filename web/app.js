@@ -7,7 +7,15 @@ import { createEditor } from './editor.js';
 
 const $ = (id) => document.getElementById(id);
 const toV3 = (p) => new THREE.Vector3(p[0] / 100, p[2] / 100, -p[1] / 100);
-const MODEL_SCALE = 2;          // 模型放大倍数，便于观察（碰撞半径已按放大后尺寸设定）
+const MODEL_SCALE = 2;
+
+// ------------------------------------------------------------------ 设置（保存在浏览器 localStorage）
+const DEFAULT_COLORS = ['#2f6fde', '#e4572e', '#2a9d8f', '#f3a712'];  // #1 蓝 #2 橙 #3 绿 #4 黄
+const settings = { trail: true, tofBeam: true, pip: true, hud: true, colors: [...DEFAULT_COLORS] };
+try { Object.assign(settings, JSON.parse(localStorage.getItem('ttsim.settings') || '{}')); } catch { /* 忽略损坏的设置 */ }
+const saveSettings = () => localStorage.setItem('ttsim.settings', JSON.stringify(settings));
+const droneColor = (i) => settings.colors[i] || DEFAULT_COLORS[i % DEFAULT_COLORS.length];
+const escapeHtml = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));          // 模型放大倍数，便于观察（碰撞半径已按放大后尺寸设定）
 const MATRIX_COLORS = { r: 0xff2a2a, b: 0x2a6bff, p: 0xc040ff };
 const MATRIX_CSS = { r: '#ff2a2a', b: '#2a6bff', p: '#c040ff', 0: '#1a1f25' };
 
@@ -71,10 +79,11 @@ function makePropeller(ccw) {
 }
 
 function makeDrone(index) {
+  const color = droneColor(index);
   const root = new THREE.Group();     // 位置 + 偏航
   const body = new THREE.Group();     // 倾斜 / 翻滚
   root.add(body);
-  const shell = new THREE.MeshStandardMaterial({ color: 0xd9dcdf, roughness: 0.45, metalness: 0.1 });
+  const shell = new THREE.MeshStandardMaterial({ color, roughness: 0.45, metalness: 0.1 });  // 机身颜色区分编号
   const dark = new THREE.MeshStandardMaterial({ color: 0x2c3036, roughness: 0.7 });
   const accent = new THREE.MeshStandardMaterial({ color: 0x3a3f46, roughness: 0.5 });
 
@@ -170,7 +179,7 @@ function makeDrone(index) {
   body.scale.setScalar(MODEL_SCALE);
 
   // 标签
-  const label = makeLabel('#' + (index + 1));
+  const label = makeLabel('#' + (index + 1), color);
   label.position.y = 0.16;
   root.add(label);
 
@@ -190,23 +199,37 @@ function makeDrone(index) {
   const trailGeo = new THREE.BufferGeometry();
   trailGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(trailMax * 3), 3));
   trailGeo.setDrawRange(0, 0);
-  const trail = new THREE.Line(trailGeo, new THREE.LineBasicMaterial({ color: [0x2f6fde, 0xe4572e, 0x2a9d8f, 0xf3a712][index % 4] }));
+  const trail = new THREE.Line(trailGeo, new THREE.LineBasicMaterial({ color }));
   trail.frustumCulled = false;
   scene.add(trail);
 
   scene.add(root);
   return {
-    label, root, body, props, pixels, led, ledMat, ledLight, statusLed, hull, shell, blob, beam, trail,
+    color, label, root, body, props, pixels, led, ledMat, ledLight, statusLed, hull, shell, blob, beam, trail,
     trailCount: 0, trailMax, lastTrail: null,
     pos: null, yaw: 0, tilt: [0, 0], spin: 0, state: null,
   };
 }
 
-function makeLabel(text) {
+/** 修改某架飞机的颜色（机身、标签、轨迹） */
+function applyDroneColor(d, index) {
+  d.color = droneColor(index);
+  d.shell.color.set(d.color);
+  d.trail.material.color.set(d.color);
+  const old = d.label;
+  d.label = makeLabel('#' + (index + 1), d.color);
+  d.label.position.copy(old.position);
+  d.root.remove(old);
+  old.material.map.dispose();
+  old.material.dispose();
+  d.root.add(d.label);
+}
+
+function makeLabel(text, color = '#0f1419') {
   const c = document.createElement('canvas');
   c.width = 128; c.height = 64;
   const g = c.getContext('2d');
-  g.fillStyle = 'rgba(15,20,25,.75)';
+  g.fillStyle = color;
   g.beginPath(); g.roundRect(24, 8, 80, 44, 12); g.fill();
   g.fillStyle = '#fff'; g.font = 'bold 30px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
   g.fillText(text, 64, 31);
@@ -341,7 +364,11 @@ function syncDrones(list) {
     [...tabs.children].forEach((b, i) => {
       const s = list[i];
       const t = `#${i + 1} ${s.client ? '●' : '○'} ${s.flying ? '飞行中' : '地面'}`;
-      if (b.textContent !== t) b.textContent = t;
+      const key = t + droneColor(i);
+      if (b.dataset.key !== key) {
+        b.dataset.key = key;
+        b.innerHTML = `<i class="sw" style="background:${droneColor(i)}"></i>${t}`;
+      }
       b.title = s.client ? `已连接：${s.client}` : '等待手机 App / Mind+ 连接';
     });
   }
@@ -430,7 +457,8 @@ function animateDrone(d, dt, t) {
 
   // 碰撞闪红
   const hit = s.collision_age !== null && s.collision_age < 0.8;
-  d.shell.color.setHex(hit && Math.floor(t * 10) % 2 === 0 ? 0xff3b30 : 0xd9dcdf);
+  // 机身本身有颜色，碰撞时红白交替闪烁
+  d.shell.color.set(hit ? (Math.floor(t * 10) % 2 === 0 ? 0xff2020 : 0xffffff) : d.color);
 
   // 阴影圈
   const floorY = Math.max(0, (s.pos[2] - s.tof_down) / 100);
@@ -440,7 +468,7 @@ function animateDrone(d, dt, t) {
   d.blob.material.opacity = Math.max(0.06, 0.3 - hgt * 0.06);
 
   // ToF 光束
-  d.beam.visible = $('tofBeam').checked;
+  d.beam.visible = settings.tofBeam;
   if (d.beam.visible) {
     const yawR = THREE.MathUtils.degToRad(d.yaw);
     const fwd = new THREE.Vector3(Math.cos(yawR), 0, Math.sin(yawR));
@@ -454,7 +482,7 @@ function animateDrone(d, dt, t) {
     d.beam.material.opacity = s.tof_front >= 8192 ? 0.2 : 0.9;
   }
 
-  d.trail.visible = $('trail').checked;
+  d.trail.visible = settings.trail;
   if (s.motors || s.falling) pushTrail(d, d.pos.clone().add(new THREE.Vector3(0, d.body.position.y, 0)));
 }
 
@@ -504,15 +532,17 @@ function updatePanel(t) {
 
   if (latest.drones.length > 1) {
     // 多机：每架一行
-    $('hud').textContent = latest.drones.map((x, i) =>
-      `#${i + 1} ${x.client ? '●' : '○'} ${x.flying ? '飞行' : '地面'} ${String(x.battery).padStart(3)}% ` +
-      `高${String(x.height).padStart(4)}cm ${x.task ? '▶ ' + x.task : ''}`).join('\n');
+    $('hud').innerHTML = latest.drones.map((x, i) =>
+      `<span style="color:${droneColor(i)}">■ #${i + 1}</span> ${x.client ? '●' : '○'} ${x.flying ? '飞行' : '地面'} ` +
+      `${String(x.battery).padStart(3)}% 高${String(x.height).padStart(4)}cm ${x.task ? '▶ ' + escapeHtml(x.task) : ''}`).join('\n');
   } else {
     $('hud').textContent =
     `#${selected + 1}  ${s.flying ? '飞行中' : '地面'}   电量 ${s.battery}%\n` +
     `高度 ${s.height}cm  航向 ${Math.round(s.yaw)}°\n` +
     `ToF ${s.tof_front >= 8192 ? '--' : s.tof_front + 'mm'}   ${s.task ? '▶ ' + s.task : ''}`;
   }
+  $('hud').hidden = !settings.hud;
+  $('pip').hidden = !settings.pip;
   $('pipLabel').textContent = s.stream ? 'TT 摄像头 ● 视频流已开启' : 'TT 摄像头（streamoff）';
 }
 
@@ -539,8 +569,13 @@ function appendLogs(entries) {
 // ------------------------------------------------------------------ SSE
 function connect() {
   const es = new EventSource('/events');
-  es.onopen = () => { $('conn').textContent = '模拟器在线'; $('conn').className = 'badge on'; loadWorld(); };
-  es.onerror = () => { $('conn').textContent = '模拟器离线'; $('conn').className = 'badge off'; };
+  const setConn = (on) => {
+    $('conn').className = 'badge ' + (on ? 'on' : 'off');
+    $('conn').querySelector('.txt').textContent = on ? '模拟器在线' : '模拟器离线';
+    $('conn').title = on ? '模拟器在线' : '模拟器离线';
+  };
+  es.onopen = () => { setConn(true); loadWorld(); };
+  es.onerror = () => setConn(false);
   es.onmessage = (ev) => {
     const data = JSON.parse(ev.data);
     latest = data;
@@ -637,7 +672,47 @@ $('scene').onchange = async (e) => {
 $('timescale').onchange = (e) => post('/api/timescale', { value: +e.target.value });
 $('pause').onclick = () => post('/api/pause', { paused: !(latest && latest.paused) });
 $('reset').onclick = () => post('/api/reset');
-$('charge').onclick = () => post('/api/battery');
+$('charge').onclick = () => {
+  post('/api/battery');
+  $('charge').textContent = '已充满 ✓';
+  setTimeout(() => { $('charge').textContent = '所有飞机充满电'; }, 1500);
+};
+
+// ------------------------------------------------------------------ 设置窗口
+function renderSettings() {
+  const n = Math.max(latest ? latest.max_drones : 4, 1);
+  const rows = $('colorRows');
+  rows.innerHTML = '';
+  for (let i = 0; i < n; i++) {
+    const label = document.createElement('label');
+    label.className = 'color-row';
+    label.innerHTML = `<span>#${i + 1}</span><input type="color" value="${droneColor(i)}">`;
+    label.querySelector('input').oninput = (e) => {
+      settings.colors[i] = e.target.value;
+      saveSettings();
+      if (drones[i]) applyDroneColor(drones[i], i);
+    };
+    rows.appendChild(label);
+  }
+  for (const key of ['trail', 'tofBeam', 'pip', 'hud']) {
+    const box = $('set_' + key);
+    box.checked = settings[key];
+    box.onchange = () => { settings[key] = box.checked; saveSettings(); };
+  }
+}
+function openSettings(on) {
+  if (on) renderSettings();
+  $('settingsModal').hidden = !on;
+}
+$('settingsBtn').onclick = () => openSettings(true);
+$('settingsClose').onclick = () => openSettings(false);
+$('settingsModal').onclick = (e) => { if (e.target === $('settingsModal')) openSettings(false); };
+$('colorReset').onclick = () => {
+  settings.colors = [...DEFAULT_COLORS];
+  saveSettings();
+  drones.forEach((d, i) => applyDroneColor(d, i));
+  renderSettings();
+};
 $('camModes').onclick = (e) => {
   const b = e.target.closest('button');
   if (!b) return;
@@ -674,6 +749,10 @@ function sendRc() {
 window.addEventListener('keydown', (e) => {
   const typing = ['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName) && e.target.type !== 'checkbox';
   if (typing) return;
+  if (!$('settingsModal').hidden) {
+    if (e.key === 'Escape') openSettings(false);
+    return;
+  }
   if (editor.handleKey(e)) { e.preventDefault(); return; }
   if (editor.active || !$('keyboard').checked) return;
   const k = e.key.toLowerCase();
@@ -697,6 +776,9 @@ function resize() {
   pipRenderer.setSize(pipCanvas.clientWidth, pipCanvas.clientHeight, false);
 }
 window.addEventListener('resize', resize);
+// 标题栏换行等导致 3D 区域尺寸变化时同步调整画布
+new ResizeObserver(resize).observe($('viewport'));
+
 
 function placeFpv(cam, d) {
   const yawR = THREE.MathUtils.degToRad(d.yaw);
@@ -743,7 +825,7 @@ function frame() {
   renderer.render(scene, camera);
   if (hideSelf) d.root.visible = true;
 
-  if (d && d.pos) {
+  if (d && d.pos && settings.pip) {
     placeFpv(fpvCam, d);
     d.root.visible = false;
     const gizmo = editor.gizmo.visible;

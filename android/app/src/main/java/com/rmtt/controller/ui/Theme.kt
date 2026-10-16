@@ -36,6 +36,11 @@ fun TTTheme(content: @Composable () -> Unit) {
     MaterialTheme(colorScheme = scheme, content = content)
 }
 
+/** 飞机编号颜色，与模拟器网页默认颜色一致：#1 蓝 #2 橙 #3 绿 #4 黄 */
+private val droneColors = listOf(Color(0xFF2F6FDE), Color(0xFFE4572E), Color(0xFF2A9D8F), Color(0xFFF3A712))
+
+fun droneColor(n: Int): Color = droneColors.getOrElse(n - 1) { Orange }
+
 fun matrixColor(c: Char): Color = when (c) {
     'r' -> MatrixRed
     'b' -> MatrixBlue

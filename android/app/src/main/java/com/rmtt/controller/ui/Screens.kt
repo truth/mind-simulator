@@ -226,7 +226,7 @@ private fun StatusBar(vm: DroneViewModel) {
     ) {
         Box(Modifier.size(8.dp).clip(CircleShape).background(if (fresh) Ok else Color(0xFFF3A712)))
         if (vm.droneNumber > 0 && vm.host.contains(':')) {
-            Box(Modifier.clip(RoundedCornerShape(3.dp)).background(Orange).padding(horizontal = 4.dp)) {
+            Box(Modifier.clip(RoundedCornerShape(3.dp)).background(droneColor(vm.droneNumber)).padding(horizontal = 4.dp)) {
                 Text("#${vm.droneNumber}", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold,
                     maxLines = 1, lineHeight = 14.sp)
             }
