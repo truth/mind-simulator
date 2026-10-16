@@ -33,6 +33,23 @@ class DroneViewModel(app: Application) : AndroidViewModel(app) {
     var connectError by mutableStateOf<String?>(null)
         private set
 
+    /** 连接后查询到的飞机序列号，用于确认控制的是哪一架 */
+    var serial by mutableStateOf<String?>(null)
+        private set
+
+    /** 模拟器多机模式下的飞机编号：#1 端口 8889，#2 端口 8989 …（真机始终 8889） */
+    val droneNumber: Int
+        get() {
+            val p = host.substringAfter(':', "").toIntOrNull() ?: DEFAULT_CMD_PORT
+            val n = (p - DEFAULT_CMD_PORT) / 100 + 1
+            return if (p >= DEFAULT_CMD_PORT && (p - DEFAULT_CMD_PORT) % 100 == 0 && n in 1..4) n else 0
+        }
+
+    fun selectDrone(n: Int) {
+        val ip = host.trim().substringBefore(':')
+        host = "$ip:${DEFAULT_CMD_PORT + 100 * (n - 1)}"
+    }
+
     // ---- 日志 / 最近回复 ----
     val logs = mutableStateListOf<TelloClient.LogEntry>()
     var lastReply by mutableStateOf("")
@@ -83,7 +100,9 @@ class DroneViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val ok = client.connect(h, p)
             connecting = false
-            if (!ok) {
+            if (ok) {
+                serial = client.send("sn?").takeIf { it.isNotBlank() && it != TelloClient.TIMEOUT && !it.startsWith("error") }
+            } else {
                 connectError = "无法连接 $h:$p。请确认手机与电脑在同一 WiFi、模拟器已启动且防火墙已放行。"
             }
         }
@@ -91,6 +110,7 @@ class DroneViewModel(app: Application) : AndroidViewModel(app) {
 
     fun disconnect() {
         autoTof = false
+        serial = null
         client.disconnect()
     }
 

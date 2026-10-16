@@ -37,6 +37,7 @@ main { position: absolute; top: 48px; bottom: 0; left: 0; right: 0; display: fle
   white-space: pre; }
 #hint { position: absolute; right: 12px; bottom: 10px; color: #7d8b9c; font-size: 12px; pointer-events: none; }
 
+aside[hidden] { display: none !important; }
 aside { width: 360px; overflow-y: auto; background: #131a21; border-left: 1px solid #253040;
   padding: 10px; display: flex; flex-direction: column; gap: 10px; }
 .tabs { display: flex; gap: 4px; }
@@ -72,3 +73,40 @@ aside { width: 360px; overflow-y: auto; background: #131a21; border-left: 1px so
 #log .warn { color: #f3c969; }
 #log .info { color: #8a96a3; }
 #log .t { color: #56616d; margin-right: 4px; }
+
+/* ---- 场景编辑器 ---- */
+#editToggle.active { background: #e4572e; border-color: #e4572e; color: #fff; }
+button.primary { background: #2f6fde; border-color: #2f6fde; color: #fff; }
+button:disabled { opacity: .45; cursor: default; }
+.row { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.muted { color: #7d8b9c; font-size: 12px; }
+.dirty { color: #f3c969; font-weight: 400; font-size: 12px; margin-left: 6px; }
+#sceneTitle { width: 100%; margin-top: 6px; }
+.scene-list { max-height: 200px; overflow-y: auto; background: #0d1217; border-radius: 4px; padding: 2px; }
+.scene-row { padding: 4px 6px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+.scene-row:hover { background: #1f2832; }
+.scene-row.active { background: #23344d; }
+.scene-row .cur { margin-left: auto; color: #4cc38a; font-size: 11px; }
+.tag { font-size: 10px; padding: 0 4px; border-radius: 3px; }
+.tag.builtin { background: #33414f; color: #b7c3d0; }
+.tag.user { background: #1e5631; color: #9be7b0; }
+.palette { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin-bottom: 6px; }
+.palette button { display: flex; flex-direction: column; align-items: center; padding: 6px 2px; font-size: 12px; }
+.palette button b { font-size: 18px; line-height: 1.1; color: #9fc3ff; }
+.palette button.active { background: #2f6fde; border-color: #2f6fde; }
+.palette button.active b { color: #fff; }
+.prop-title { font-weight: 600; margin-bottom: 6px; }
+.prop-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; }
+.prop-grid label { display: flex; flex-direction: column; gap: 2px; color: #7d8b9c; font-size: 12px; }
+.prop-grid input, .prop-grid select { width: 100%; padding: 2px 6px; }
+.prop-grid input[type=color] { height: 26px; padding: 1px; }
+.unit { margin-top: 4px; }
+.seg.mini { display: inline-flex; float: right; }
+.seg.mini button { padding: 0 8px; font-size: 12px; }
+.mini-btn { float: right; padding: 0 8px; font-size: 12px; }
+.obj-list { max-height: 220px; overflow-y: auto; }
+.obj-row { padding: 3px 6px; border-radius: 4px; cursor: pointer; font: 12px Consolas, "Microsoft YaHei", monospace; display: flex; align-items: center; gap: 6px; }
+.obj-row:hover { background: #1f2832; }
+.obj-row.active { background: #23344d; }
+.obj-row i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; border: 1px solid #33414f; }
+.help { line-height: 1.6; }

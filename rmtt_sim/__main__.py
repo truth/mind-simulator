@@ -8,7 +8,7 @@ import webbrowser
 from . import __version__
 from .simulator import CMD_PORT, Simulator, detect_lan_ips
 from .web import serve
-from .world import SCENES
+from .scenes import SceneLibrary
 
 
 def main():
@@ -18,7 +18,8 @@ def main():
                    help="飞机 UDP 绑定地址，可重复指定多次模拟多架飞机（默认 192.168.10.1）")
     p.add_argument("--drones", type=int, default=1,
                    help="模拟飞机数量：#1 为 192.168.10.1，#2 起为 192.168.10.11、.12 …（与 setup_network.ps1 一致）")
-    p.add_argument("--scene", default="pads", choices=sorted(SCENES), help="初始场景（默认 pads）")
+    p.add_argument("--scene", default="pads",
+                   help="初始场景 id（scenes/builtin 或 scenes/user 下的文件名，默认 pads）")
     p.add_argument("--web-host", default="127.0.0.1")
     p.add_argument("--web-port", type=int, default=8080)
     p.add_argument("--auto-land", type=float, default=0.0,
@@ -30,8 +31,13 @@ def main():
     ips = args.ip or ["192.168.10.1"] + ["192.168.10.%d" % (9 + i) for i in range(2, args.drones + 1)]
 
     print("RoboMaster TT 模拟器 v%s" % __version__)
+    library = SceneLibrary()
+    ids = [x["id"] for x in library.list()]
+    if args.scene not in ids:
+        print("[错误] 场景「%s」不存在，可用：%s" % (args.scene, ", ".join(ids)))
+        sys.exit(1)
     try:
-        sim = Simulator(ips, scene=args.scene, auto_land=args.auto_land,
+        sim = Simulator(ips, scene=args.scene, auto_land=args.auto_land, library=library,
                         lan_ips=[] if args.no_lan else detect_lan_ips())
     except OSError as e:
         print("\n[错误] 无法绑定 UDP 地址 %s:%d —— %s" % (", ".join(ips), CMD_PORT, e))

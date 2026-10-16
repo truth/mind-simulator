@@ -9,6 +9,7 @@ import time
 from collections import deque
 
 from .matrix import COLORS, Matrix, TopLed, valid_pattern
+from .world import DRONE_HEIGHT, DRONE_RADIUS
 
 TAKEOFF_HEIGHT = 80.0   # cm
 TAKEOFF_SPEED = 70.0    # cm/s
@@ -143,25 +144,30 @@ class CallSeg:
 # ---------------------------------------------------------------- 飞行器
 
 class Drone:
-    def __init__(self, index, ip, world, logger, home=(0.0, 0.0)):
+    def __init__(self, index, ip, world, logger):
         self.index = index
         self.ip = ip
         self.world = world
         self.logger = logger
-        self.home = home
         self.sn = "0TQZK7SIM%05d" % (index + 1)
         self.ssid = "RMTT-SIM%03d" % (index + 1)
         self.matrix = Matrix()
         self.led = TopLed()
         self.client = None
         self.auto_land_timeout = 0.0
+        self.peers = []  # 同一世界中的其他飞机（多机模式下互相碰撞）
         self.reset()
 
     # ---- 生命周期 ----
     def reset(self):
+        # 起飞点取自场景；多架飞机依次排在起飞点左侧，间隔 1m
+        s = self.world.start
+        r = math.radians(s["yaw"])
+        off = self.index * 100.0
+        self.home = (s["x"] + math.sin(r) * off, s["y"] + math.cos(r) * off)
         floor = self.world.floor_height(*self.home)
         self.pos = (self.home[0], self.home[1], floor)
-        self.yaw = 0.0
+        self.yaw = _deg_norm(s["yaw"])
         self.vel = (0.0, 0.0, 0.0)
         self.tilt = [0.0, 0.0]  # 视觉倾角：[前倾, 右倾] deg
         self.flip = None
@@ -206,10 +212,17 @@ class Drone:
         return self.world.floor_height(self.pos[0], self.pos[1])
 
     def try_move(self, p):
-        """移动到 p，撞到障碍物则不移动并返回 False（由 update 判定为碰撞）。"""
+        """移动到 p，撞到障碍物或其他飞机则不移动并返回 False（由 update 判定为碰撞）。"""
         if self.world.collides(p):
             self._collided = True
             return False
+        for other in self.peers:
+            if (math.hypot(p[0] - other.pos[0], p[1] - other.pos[1]) < 2 * DRONE_RADIUS
+                    and abs(p[2] - other.pos[2]) < DRONE_HEIGHT):
+                self._collided = True
+                other.collision_t = time.time()
+                other.log("warn", "被 #%d 撞到" % (self.index + 1))
+                return False
         floor = self.world.floor_height(p[0], p[1])
         if p[2] < floor + MIN_FLY_HEIGHT and self.flying and not self._landing:
             p = (p[0], p[1], max(p[2], floor + MIN_FLY_HEIGHT))

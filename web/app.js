@@ -2,6 +2,8 @@
 // 仿真坐标（cm）：X 前 / Y 左 / Z 上  →  Three.js（m）：x = X, y = Z, z = -Y
 import * as THREE from 'three';
 import { OrbitControls } from './vendor/OrbitControls.js';
+import { buildWorld } from './world3d.js';
+import { createEditor } from './editor.js';
 
 const $ = (id) => document.getElementById(id);
 const toV3 = (p) => new THREE.Vector3(p[0] / 100, p[2] / 100, -p[1] / 100);
@@ -213,52 +215,79 @@ function makeLabel(text) {
   return s;
 }
 
-// ------------------------------------------------------------------ 世界（障碍物 / 挑战卡）
+// ------------------------------------------------------------------ 世界（障碍物 / 挑战卡 / 起飞点）
 const worldGroup = new THREE.Group();
 scene.add(worldGroup);
 let worldVersion = -1;
+let worldData = null;
+let editor = null;
 
-function padTexture(id) {
-  const c = document.createElement('canvas');
-  c.width = c.height = 256;
-  const g = c.getContext('2d');
-  g.fillStyle = '#e9e9e4'; g.fillRect(0, 0, 256, 256);
-  g.strokeStyle = '#222'; g.lineWidth = 10; g.strokeRect(8, 8, 240, 240);
-  g.fillStyle = '#d63a2f';
-  g.beginPath(); g.moveTo(128, 30); g.lineTo(150, 70); g.lineTo(106, 70); g.fill();  // 指向 +X 的箭头
-  g.fillStyle = '#222'; g.font = 'bold 110px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-  g.fillText(String(id), 128, 150);
-  g.font = 'bold 28px sans-serif'; g.fillText('M' + id, 128, 220);
-  const t = new THREE.CanvasTexture(c);
-  t.anisotropy = 4;
-  return t;
+function rebuildWorld() {
+  if (worldData) buildWorld(worldGroup, worldData);
 }
 
-async function loadWorld() {
-  const w = await (await fetch('/api/world')).json();
-  worldVersion = w.version;
-  worldGroup.clear();
+/** 让相机框住整个场景（top = 俯视）。高度始终高于最高的障碍物，避免被墙挡住视线 */
+function frameScene(top = false) {
+  const w = worldData;
+  if (!w) return;
+  const xs = [w.start.x - 150, w.start.x + 150], ys = [w.start.y - 150, w.start.y + 150];
+  let hmax = 0;
   for (const o of w.obstacles) {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(o.w / 100, o.h / 100, o.d / 100),
-      new THREE.MeshStandardMaterial({ color: o.color, roughness: 0.8 }));
-    m.position.set(o.x / 100, (o.z + o.h / 2) / 100, -o.y / 100);
-    m.castShadow = m.receiveShadow = true;
-    worldGroup.add(m);
+    const r = o.type === 'cylinder' ? o.r : Math.max(o.w || 0, o.d || 0) / 2 + (o.t || 0);
+    xs.push(o.x - r, o.x + r); ys.push(o.y - r, o.y + r);
+    hmax = Math.max(hmax, (o.z || 0) + o.h + (o.t || 0));
   }
-  for (const p of w.pads) {
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 0.2),
-      new THREE.MeshStandardMaterial({ map: padTexture(p.id), roughness: 0.9 }));
-    m.rotation.x = -Math.PI / 2;
-    m.rotation.z = -Math.PI / 2;  // 纹理上方（箭头）指向 +X
-    m.position.set(p.x / 100, p.z / 100 + 0.003, -p.y / 100);
-    m.receiveShadow = true;
-    worldGroup.add(m);
+  for (const p of w.pads) { xs.push(p.x); ys.push(p.y); }
+  const cx = (Math.min(...xs) + Math.max(...xs)) / 200, cy = (Math.min(...ys) + Math.max(...ys)) / 200;
+  const size = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)) / 100;
+  const dist = size * 0.75 + 1.2;
+  controls.target.set(cx, 0.3, -cy);
+  if (top) camera.position.set(cx, Math.max(hmax / 100 + 2, dist * 1.5), -cy + 0.01);
+  else camera.position.set(cx - dist * 0.7, Math.max(hmax / 100 + 1.2, dist * 0.8), -cy + dist * 0.7);
+  if (camMode !== 'orbit') {
+    camMode = 'orbit';
+    [...$('camModes').children].forEach((x) => x.classList.toggle('active', x.dataset.cam === 'orbit'));
+    controls.enabled = true;
   }
+  controls.update();
+}
+let framedScene = null;
+
+let loadingWorld = null;
+function loadWorld() {
+  if (!loadingWorld) {
+    loadingWorld = (async () => {
+      try {
+        const w = await (await fetch('/api/world')).json();
+        worldData = w;
+        worldVersion = w.version;
+        rebuildWorld();
+        // 切换到另一个场景时自动调整相机（编辑同一场景时保持视角）
+        const key = w.scene || '(new)';
+        if (key !== framedScene) { framedScene = key; frameScene(); }
+        editor.onWorldLoaded(w);
+        await editor.refreshScenes();
+      } finally {
+        loadingWorld = null;
+      }
+    })();
+  }
+  return loadingWorld;
+}
+
+function fillSceneSelect(scenes, current) {
   const sel = $('scene');
-  if (!sel.options.length) {
-    for (const [k, v] of Object.entries(w.scenes)) sel.add(new Option(v, k));
+  sel.innerHTML = '';
+  for (const [label, builtin] of [['内置场景', true], ['我的场景', false]]) {
+    const items = scenes.filter((s) => s.builtin === builtin);
+    if (!items.length) continue;
+    const g = document.createElement('optgroup');
+    g.label = label;
+    items.forEach((s) => g.appendChild(new Option(s.title, s.id)));
+    sel.appendChild(g);
   }
-  sel.value = w.scene;
+  if (!current) sel.appendChild(new Option('（未保存的新场景）', ''));
+  sel.value = current || '';
 }
 
 // ------------------------------------------------------------------ 状态同步
@@ -293,6 +322,14 @@ function syncDrones(list) {
       tabs.appendChild(b);
     });
     updateTabs();
+  }
+  if (list.length > 1) {
+    [...tabs.children].forEach((b, i) => {
+      const s = list[i];
+      const t = `#${i + 1} ${s.client ? '●' : '○'} ${s.flying ? '飞行中' : '地面'}`;
+      if (b.textContent !== t) b.textContent = t;
+      b.title = s.client ? `已连接：${s.client}` : '等待手机 App / Mind+ 连接';
+    });
   }
   list.forEach((s, i) => {
     const d = drones[i];
@@ -451,10 +488,17 @@ function updatePanel(t) {
   $('led2d').style.background = css;
   $('led2d').style.boxShadow = (r + g + b) > 0 ? `0 0 14px ${css}` : 'none';
 
-  $('hud').textContent =
+  if (latest.drones.length > 1) {
+    // 多机：每架一行
+    $('hud').textContent = latest.drones.map((x, i) =>
+      `#${i + 1} ${x.client ? '●' : '○'} ${x.flying ? '飞行' : '地面'} ${String(x.battery).padStart(3)}% ` +
+      `高${String(x.height).padStart(4)}cm ${x.task ? '▶ ' + x.task : ''}`).join('\n');
+  } else {
+    $('hud').textContent =
     `#${selected + 1}  ${s.flying ? '飞行中' : '地面'}   电量 ${s.battery}%\n` +
     `高度 ${s.height}cm  航向 ${Math.round(s.yaw)}°\n` +
     `ToF ${s.tof_front >= 8192 ? '--' : s.tof_front + 'mm'}   ${s.task ? '▶ ' + s.task : ''}`;
+  }
   $('pipLabel').textContent = s.stream ? 'TT 摄像头 ● 视频流已开启' : 'TT 摄像头（streamoff）';
 }
 
@@ -481,7 +525,7 @@ function appendLogs(entries) {
 // ------------------------------------------------------------------ SSE
 function connect() {
   const es = new EventSource('/events');
-  es.onopen = () => { $('conn').textContent = '模拟器在线'; $('conn').className = 'badge on'; };
+  es.onopen = () => { $('conn').textContent = '模拟器在线'; $('conn').className = 'badge on'; loadWorld(); };
   es.onerror = () => { $('conn').textContent = '模拟器离线'; $('conn').className = 'badge off'; };
   es.onmessage = (ev) => {
     const data = JSON.parse(ev.data);
@@ -491,7 +535,8 @@ function connect() {
     resetId = data.reset_id;
     syncDrones(data.drones);
     appendLogs(data.logs);
-    if (data.world_version !== worldVersion) loadWorld();
+    // 编辑器正在拖动 / 提交时不从服务器重载，避免打断操作
+    if (data.world_version !== worldVersion && !editor.busy()) loadWorld();
     $('pause').textContent = data.paused ? '继续' : '暂停';
     $('timescale').value = String(data.time_scale);
   };
@@ -502,8 +547,49 @@ const post = (url, body = {}) => fetch(url, {
   method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
 }).then((r) => r.json());
 const sendCmd = (cmd) => post('/api/command', { drone: selected, cmd });
+const postFull = async (url, body = {}) => {
+  const r = await fetch(url, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  });
+  let data = {};
+  try { data = await r.json(); } catch { /* 空响应 */ }
+  return { status: r.status, data };
+};
 
-$('scene').onchange = (e) => post('/api/scene', { name: e.target.value });
+editor = createEditor({
+  scene3d: scene, camera, canvas, controls, ground, worldGroup,
+  getWorld: () => worldData,
+  rebuild: rebuildWorld,
+  reloadWorld: loadWorld,
+  setVersion: (v) => { worldVersion = v; },
+  post: postFull,
+  onScenes: fillSceneSelect,
+});
+
+// 调试 / 自动化测试用
+window.ttDebug = { world: () => worldData, version: () => worldVersion };
+
+$('editToggle').onclick = () => {
+  const on = !editor.active;
+  if (on) {
+    // 编辑时使用环绕视角
+    camMode = 'orbit';
+    [...$('camModes').children].forEach((x) => x.classList.toggle('active', x.dataset.cam === 'orbit'));
+  }
+  $('editToggle').classList.toggle('active', on);
+  $('dronePanel').hidden = on;
+  $('editorPanel').hidden = !on;
+  editor.setActive(on);
+};
+
+$('scene').onchange = async (e) => {
+  if (worldData && worldData.dirty && !confirm('当前场景有未保存的修改，确定切换吗？')) {
+    e.target.value = worldData.scene || '';
+    return;
+  }
+  await post('/api/scene', { name: e.target.value });
+  loadWorld();
+};
 $('timescale').onchange = (e) => post('/api/timescale', { value: +e.target.value });
 $('pause').onclick = () => post('/api/pause', { paused: !(latest && latest.paused) });
 $('reset').onclick = () => post('/api/reset');
@@ -511,6 +597,7 @@ $('charge').onclick = () => post('/api/battery');
 $('camModes').onclick = (e) => {
   const b = e.target.closest('button');
   if (!b) return;
+  if (b.dataset.view) { frameScene(b.dataset.view === 'top'); return; }
   camMode = b.dataset.cam;
   [...$('camModes').children].forEach((x) => x.classList.toggle('active', x === b));
   controls.enabled = camMode === 'orbit';
@@ -541,7 +628,10 @@ function sendRc() {
   if (rc !== lastRc) { lastRc = rc; sendCmd(rc); }
 }
 window.addEventListener('keydown', (e) => {
-  if (!$('keyboard').checked || e.target.tagName === 'INPUT' && e.target.type !== 'checkbox') return;
+  const typing = ['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName) && e.target.type !== 'checkbox';
+  if (typing) return;
+  if (editor.handleKey(e)) { e.preventDefault(); return; }
+  if (editor.active || !$('keyboard').checked) return;
   const k = e.key.toLowerCase();
   if (k === 't') return sendCmd('takeoff');
   if (k === 'l') return sendCmd('land');
@@ -550,21 +640,8 @@ window.addEventListener('keydown', (e) => {
   }
 });
 window.addEventListener('keyup', (e) => {
-  if (!$('keyboard').checked) return;
+  if (!$('keyboard').checked || editor.active) return;
   keys.delete(e.key.toLowerCase()); sendRc();
-});
-
-// Shift + 点击地面放置障碍物
-const raycaster = new THREE.Raycaster();
-canvas.addEventListener('pointerdown', (e) => {
-  if (!e.shiftKey) return;
-  const rect = canvas.getBoundingClientRect();
-  const ndc = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1,
-    -((e.clientY - rect.top) / rect.height) * 2 + 1);
-  raycaster.setFromCamera(ndc, camera);
-  const hit = raycaster.intersectObject(ground)[0];
-  if (!hit) return;
-  post('/api/obstacle', { x: hit.point.x * 100, y: -hit.point.z * 100, w: 40, d: 40, h: 120 });
 });
 
 // ------------------------------------------------------------------ 渲染循环
@@ -625,7 +702,10 @@ function frame() {
   if (d && d.pos) {
     placeFpv(fpvCam, d);
     d.root.visible = false;
+    const gizmo = editor.gizmo.visible;
+    editor.gizmo.visible = false;  // 机载摄像头画面里不显示编辑手柄
     pipRenderer.render(scene, fpvCam);
+    editor.gizmo.visible = gizmo;
     d.root.visible = true;
   }
   updatePanel(t);

@@ -37,6 +37,10 @@ def make_handler(sim):
             if path == "/api/world":
                 with sim.lock:
                     return self._json(sim.world.to_dict())
+            if path == "/api/scenes":
+                with sim.lock:
+                    current = sim.world.scene_id
+                return self._json({"scenes": sim.library.list(), "current": current})
             if path == "/":
                 path = "/index.html"
             full = os.path.normpath(os.path.join(WEB_DIR, path.lstrip("/")))
@@ -86,7 +90,27 @@ def make_handler(sim):
                 if path == "/api/reset":
                     sim.reset()
                 elif path == "/api/scene":
-                    sim.load_scene(data["name"])
+                    try:
+                        sim.load_scene(str(data["name"]))
+                    except KeyError:
+                        return self._json({"error": "场景不存在：%s" % data["name"]}, 404)
+                elif path == "/api/scene/new":
+                    sim.new_scene()
+                elif path == "/api/world":
+                    return self._json({"ok": True, "version": sim.edit_world(data)})
+                elif path == "/api/scenes/save":
+                    try:
+                        sid = sim.save_scene(str(data["title"]).strip()[:40] or "未命名场景",
+                                             overwrite=bool(data.get("overwrite")),
+                                             save_as=bool(data.get("save_as")))
+                    except FileExistsError:
+                        return self._json({"error": "exists"}, 409)
+                    return self._json({"ok": True, "id": sid})
+                elif path == "/api/scenes/delete":
+                    try:
+                        sim.delete_scene(str(data["id"]))
+                    except KeyError:
+                        return self._json({"error": "场景不存在"}, 404)
                 elif path == "/api/timescale":
                     with sim.lock:
                         sim.time_scale = max(0.1, min(10.0, float(data["value"])))
@@ -99,14 +123,16 @@ def make_handler(sim):
                             d.battery = 100.0
                 elif path == "/api/obstacle":
                     with sim.lock:
-                        sim.world.add_obstacle({k: float(data[k]) for k in ("x", "y", "w", "d", "h")})
+                        sim.world.add_obstacle(dict(data, type=data.get("type", "box")))
                 elif path == "/api/obstacles/clear":
                     with sim.lock:
                         sim.world.clear_obstacles()
                 else:
                     return self._json({"error": "not found"}, 404)
-            except (KeyError, ValueError, IndexError) as e:
+            except (KeyError, ValueError, IndexError, TypeError) as e:
                 return self._json({"error": str(e)}, 400)
+            except OSError as e:
+                return self._json({"error": "文件操作失败：%s" % e}, 500)
             return self._json({"ok": True})
 
     return Handler

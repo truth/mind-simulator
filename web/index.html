@@ -15,10 +15,13 @@
     <div class="brand"><span class="logo">TT</span> RoboMaster TT 模拟器 <small>Mind+ 实时模式</small></div>
     <div class="toolbar">
       <label>场景 <select id="scene"></select></label>
+      <button id="editToggle" title="打开场景编辑器：添加 / 移动 / 旋转障碍物，保存到场景库">✎ 编辑场景</button>
       <div class="seg" id="camModes">
         <button data-cam="orbit" class="active" title="鼠标左键旋转 / 右键平移 / 滚轮缩放">环绕</button>
         <button data-cam="chase" title="跟在飞机后方">跟随</button>
         <button data-cam="fpv" title="飞机前置摄像头视角">第一视角</button>
+        <button data-view="top" title="俯视整个场景（编辑场景时推荐）">俯视</button>
+        <button data-view="fit" title="斜视整个场景">全景</button>
       </div>
       <label>速度 <select id="timescale">
         <option value="0.5">0.5×</option><option value="1" selected>1×</option>
@@ -39,10 +42,10 @@
       <canvas id="scene3d" tabindex="0"></canvas>
       <div id="pip"><canvas id="pipCanvas" width="320" height="180"></canvas><span id="pipLabel">TT 摄像头</span></div>
       <div id="hud"></div>
-      <div id="hint">Shift + 点击地面：放置障碍物</div>
+      <div id="hint"><span id="editHint"></span></div>
     </section>
 
-    <aside>
+    <aside id="dronePanel">
       <div id="droneTabs" class="tabs"></div>
 
       <div class="card">
@@ -99,6 +102,65 @@
         </div>
         <form id="cmdForm"><input id="cmdInput" placeholder="输入 SDK 指令，如 go 100 0 50 60，回车发送" autocomplete="off"></form>
         <div id="log"></div>
+      </div>
+    </aside>
+    <aside id="editorPanel" hidden>
+      <div class="card">
+        <h3>场景库</h3>
+        <div id="sceneList" class="scene-list"></div>
+        <div class="row">
+          <button id="scLoad" title="也可以双击列表项">加载</button>
+          <button id="scNew">新建空白</button>
+          <button id="scDelete" class="danger">删除</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>当前场景 <span id="dirtyMark" class="dirty"></span></h3>
+        <div class="muted" id="sceneWhere"></div>
+        <input id="sceneTitle" maxlength="40" placeholder="场景名称">
+        <div class="row">
+          <button id="scSave" class="primary">保存</button>
+          <button id="scSaveAs">另存为</button>
+          <button id="scExport" title="下载为 JSON 文件">导出</button>
+          <button id="scImport" title="从 JSON 文件导入">导入</button>
+          <input type="file" id="importFile" accept=".json,application/json" hidden>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>添加对象 <small>选择后在地面上单击放置</small></h3>
+        <div id="palette" class="palette">
+          <button data-add="box"><b>▭</b>长方体</button>
+          <button data-add="wall"><b>▮</b>墙</button>
+          <button data-add="cylinder"><b>◯</b>圆柱</button>
+          <button data-add="gate"><b>⊓</b>门框</button>
+          <button data-add="pad"><b>▣</b>挑战卡</button>
+        </div>
+        <label class="chk"><input type="checkbox" id="snap" checked> 吸附（10cm / 15°）</label>
+      </div>
+
+      <div class="card">
+        <h3>属性
+          <span class="seg mini" id="modeBtns" hidden>
+            <button data-mode="translate" class="active" title="W">移动</button><button data-mode="rotate" title="E">旋转</button>
+          </span>
+        </h3>
+        <div id="props"></div>
+        <div class="row" id="propActions" hidden>
+          <button id="propDuplicate" title="Ctrl+D">复制</button>
+          <button id="propDelete" class="danger" title="Delete">删除</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>对象列表 <small id="objCount"></small> <button id="undoBtn" class="mini-btn" title="Ctrl+Z">撤销</button></h3>
+        <div id="objList" class="obj-list"></div>
+      </div>
+
+      <div class="card help muted">
+        单击选中 · 拖动彩色手柄移动 / 旋转 · W 移动 · E 旋转 · Delete 删除 · Ctrl+D 复制 · Ctrl+Z 撤销 · Esc 取消<br>
+        编辑实时生效：飞机碰撞、ToF 测距、挑战卡识别都会立刻使用新场景。
       </div>
     </aside>
   </main>

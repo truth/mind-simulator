@@ -6,6 +6,7 @@ import time
 from collections import deque
 
 from .drone import Drone
+from .scenes import SceneLibrary
 from .world import World
 
 CMD_PORT = 8889
@@ -104,7 +105,7 @@ class UdpEndpoint:
 
 
 class Simulator:
-    def __init__(self, ips, scene="empty", udp=True, auto_land=0.0, lan_ips=()):
+    def __init__(self, ips, scene="empty", udp=True, auto_land=0.0, lan_ips=(), library=None):
         self.lock = threading.RLock()
         self.running = True
         self.time_scale = 1.0
@@ -112,12 +113,16 @@ class Simulator:
         self.reset_id = 0
         self.logs = deque(maxlen=500)
         self.log_seq = 0
-        self.world = World(scene)
+        self.library = library or SceneLibrary()
+        content, builtin = self.library.load(scene)
+        self.world = World(content, scene_id=scene, builtin=builtin)
         self.drones = []
         for i, ip in enumerate(ips):
-            d = Drone(i, ip, self.world, self.log, home=(0.0, i * 100.0))
+            d = Drone(i, ip, self.world, self.log)
             d.auto_land_timeout = auto_land
             self.drones.append(d)
+        for d in self.drones:
+            d.peers = [o for o in self.drones if o is not d]
         self.endpoints = [UdpEndpoint(self, d, d.ip) for d in self.drones] if udp else []
         self.lan_endpoints = []  # [(drone_index, ip, port)]
         if udp:
@@ -209,10 +214,44 @@ class Simulator:
             self.reset_id += 1
         self.log(0, "info", "已重置所有飞机")
 
-    def load_scene(self, name):
+    # ---- 场景库 ----
+    def load_scene(self, scene_id):
+        content, builtin = self.library.load(scene_id)
         with self.lock:
-            self.world.load_scene(name)
+            self.world.set_content(content, scene_id=scene_id, builtin=builtin, dirty=False)
         self.reset()
+        self.log(0, "info", "已加载场景「%s」" % self.world.title)
+
+    def new_scene(self):
+        with self.lock:
+            self.world.set_content({"title": "新场景"}, scene_id="", builtin=False, dirty=True)
+        self.reset()
+
+    def edit_world(self, data):
+        """编辑器提交的场景内容：替换障碍物 / 挑战卡 / 起飞点，不重置飞机。"""
+        with self.lock:
+            self.world.set_content(data, dirty=True)
+            return self.world.version
+
+    def save_scene(self, title, overwrite=False, save_as=False):
+        """保存当前场景。当前是用户场景且未"另存为"时覆盖原文件，否则按标题新建。"""
+        with self.lock:
+            w = self.world
+            content = w.content()
+            same = not save_as and w.scene_id and not w.builtin
+            sid = self.library.save(content, title, scene_id=w.scene_id if same else None,
+                                    overwrite=overwrite or same)
+            w.scene_id, w.builtin, w.dirty, w.title = sid, False, False, title
+            w.version += 1
+        self.log(0, "info", "场景已保存为「%s」" % title)
+        return sid
+
+    def delete_scene(self, scene_id):
+        self.library.delete(scene_id)
+        with self.lock:
+            if self.world.scene_id == scene_id:
+                self.world.scene_id, self.world.dirty = "", True
+                self.world.version += 1
 
     def shutdown(self):
         self.running = False

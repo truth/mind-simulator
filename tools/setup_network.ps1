@@ -12,12 +12,12 @@
   地址只写入活动存储（ActiveStore），重启电脑后自动消失，不会影响真实网卡。
 
 .EXAMPLE
-  .\setup_network.ps1              # 单机
-  .\setup_network.ps1 -Drones 3    # 三架飞机
+  .\setup_network.ps1              # 默认准备 4 架（单机 / 双机模式均可直接用）
+  .\setup_network.ps1 -Drones 6    # 六架飞机
   .\setup_network.ps1 -Remove      # 移除所有地址与防火墙规则
 #>
 param(
-  [int]$Drones = 1,
+  [int]$Drones = 4,   # 预先准备 4 架飞机的地址和端口，单机 / 双机模式都不必重新配置
   [switch]$Remove
 )
 

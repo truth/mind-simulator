@@ -142,6 +142,11 @@ fun ConnectScreen(vm: DroneViewModel) {
                 }
             }
             vm.connectError?.let { Text(it, color = Danger, fontSize = 13.sp) }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("模拟器飞机", fontSize = 13.sp, color = Muted)
+                Segmented(listOf("#1", "#2", "#3", "#4"), vm.droneNumber - 1) { vm.selectDrone(it + 1) }
+                Text("双机模式：两部手机各选一个编号", fontSize = 12.sp, color = Muted)
+            }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = { vm.host = "192.168.10.1" }) { Text("真机 192.168.10.1") }
                 OutlinedButton(onClick = { vm.host = "10.0.2.2:8889" }) { Text("Android 模拟器 10.0.2.2") }
@@ -215,13 +220,21 @@ private fun StatusBar(vm: DroneViewModel) {
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Box(Modifier.size(9.dp).clip(CircleShape).background(if (fresh) Ok else Color(0xFFF3A712)))
-        Text(vm.client.targetAddress ?: "", fontSize = 12.sp, color = Muted)
+        if (vm.droneNumber > 0 && vm.host.contains(':')) {
+            Box(Modifier.clip(RoundedCornerShape(4.dp)).background(Orange).padding(horizontal = 6.dp)) {
+                Text("#${vm.droneNumber}", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+        Text(
+            listOfNotNull(vm.client.targetAddress, vm.serial?.let { "SN $it" }).joinToString("  "),
+            fontSize = 12.sp, color = Muted,
+        )
         if (s.valid) {
             Stat("电量", "${s.battery}%", if (s.battery < 20) Danger else if (s.battery < 50) Color(0xFFF3C969) else null)
             Stat("高度", "${s.height}cm")
             Stat("下视ToF", "${s.tof}cm")
             Stat("航向", "${s.yaw}°")
-            Stat("温度", "${s.tempLow}~${s.tempHigh}℃")
+            Stat("温度", "${s.tempHigh}℃")
             Stat("挑战卡", if (s.mid > 0) "m${s.mid}" else "-")
         } else {
             Text("未收到 8890 状态推送", fontSize = 12.sp, color = Color(0xFFF3A712))

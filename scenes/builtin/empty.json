@@ -1,0 +1,12 @@
+{
+  "order": 1,
+  "title": "空旷场地",
+  "description": "没有障碍物，适合练习基本飞行。",
+  "start": {
+    "x": 0,
+    "y": 0,
+    "yaw": 0
+  },
+  "obstacles": [],
+  "pads": []
+}

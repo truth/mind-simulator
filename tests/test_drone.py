@@ -4,12 +4,13 @@ import math
 import unittest
 
 from rmtt_sim.drone import Drone
+from rmtt_sim.scenes import SceneLibrary
 from rmtt_sim.world import World, box
 
 
 class Harness:
     def __init__(self, scene="empty"):
-        self.world = World(scene)
+        self.world = World(SceneLibrary().load(scene)[0], scene_id=scene)
         self.logs = []
         self.d = Drone(0, "127.0.0.1", self.world, lambda i, k, t: self.logs.append((k, t)))
 

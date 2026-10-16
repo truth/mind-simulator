@@ -35,14 +35,14 @@ Mind+ 实时模式通过 **Tello SDK 3.0** 文本协议控制飞机：
 ### 命令行参数
 
 ```bash
-python -m rmtt_sim [--scene pads|empty|obstacles|course] [--drones N]
+python -m rmtt_sim [--scene 场景id] [--drones N]
                    [--auto-land 15] [--web-port 8080] [--no-browser]
 ```
 
 | 参数 | 说明 |
 |---|---|
-| `--scene` | 初始场景：`pads` 挑战卡（默认）、`empty` 空场地、`obstacles` 障碍物/ToF 测试、`course` 门框赛道 |
-| `--drones N` | 模拟多架飞机：#1 为 `192.168.10.1`，#2 起为 `192.168.10.11`、`.12`…（需先 `setup_network.ps1 -Drones N`） |
+| `--scene` | 初始场景 id（`scenes/builtin` 或 `scenes/user` 下的文件名）：`empty` `pads`（默认）`obstacles` `course` `pillars` `room`，或你保存的场景 |
+| `--drones N` | 模拟多架飞机：#1 为 `192.168.10.1`，#2 起为 `192.168.10.11`、`.12`…（网络脚本默认已准备 4 架） |
 | `--auto-land S` | 超过 S 秒没收到指令自动降落（真机为 15 秒，默认关闭） |
 | `--ip A` | 自定义飞机绑定地址，可重复 |
 | `--no-lan` | 不在局域网地址上监听（默认监听，供手机 App 连接） |
@@ -51,8 +51,41 @@ python -m rmtt_sim [--scene pads|empty|obstacles|course] [--drones N]
 
 - **视角**：环绕（鼠标左键旋转 / 右键平移 / 滚轮缩放）、跟随、第一视角；左下角始终显示机载摄像头画面。
 - **飞机模型**：机身、桨叶（起桨/飞行时转动）、桨保护罩、扩展模块、**8×8 红蓝点阵**、**顶部 RGB 灯**、前向 ToF 光束、机头状态灯（SDK 模式紫色闪烁）。
-- **场景**：障碍物会挡住飞行（碰撞时飞机闪红、当前指令返回 `error Collision`），也会被 ToF 测到；`Shift + 点击地面` 可随手放置障碍物。
+- **场景**：障碍物会挡住飞行（碰撞时飞机闪红、当前指令返回 `error Collision`），也会被 ToF 测到，飞机可以降落在障碍物顶面上。顶部「场景」下拉框切换场景，「俯视 / 全景」快速调整视角。
 - **其他**：飞行轨迹、0.5×~4× 仿真速度、暂停、重置、充满电、键盘遥控（W/S/A/D 平移、↑/↓ 升降、Q/E 旋转、T 起飞、L 降落）。
+
+## 场景库与场景编辑器
+
+点击顶部 **✎ 编辑场景** 进入编辑模式（右侧切换为编辑面板）：
+
+| 功能 | 操作 |
+|---|---|
+| 添加对象 | 在「添加对象」中选择 **长方体 / 墙 / 圆柱 / 门框 / 挑战卡**，再到地面上单击放置（按住 Shift 连续放置） |
+| 选中 | 在 3D 视图中单击对象，或在「对象列表」中点击；起飞点（蓝色圆环箭头）也可以选中移动 / 旋转 |
+| 移动 / 旋转 | 拖动彩色手柄；`W` 移动、`E` 旋转；勾选「吸附」时按 10cm / 15° 对齐 |
+| 精确调整 | 属性面板直接输入坐标、尺寸、离地高度、旋转角度、颜色、挑战卡编号（单位 cm） |
+| 复制 / 删除 / 撤销 | `Ctrl+D` / `Delete` / `Ctrl+Z`，`Esc` 取消放置或取消选中 |
+| 场景库 | 加载、新建空白、删除；保存、另存为；导出 / 导入 JSON 文件 |
+
+- 编辑**实时生效**：飞机碰撞、ToF 测距、挑战卡识别立即使用新场景，可以边飞边改。
+- 场景是 JSON 文件：内置场景在 `scenes/builtin/`（只读，修改后保存会提示另存），你的场景保存在 `scenes/user/`。
+- 内置场景：空旷场地、挑战卡 m1-m8、障碍物 / ToF 测试、穿越门框赛道、圆柱森林、室内房间（带门和可降落的桌子）。
+- 编辑时建议点「俯视」，从正上方摆放更直观。
+
+场景文件格式（坐标单位 cm，X 前 / Y 左 / Z 上，`yaw` 俯视顺时针为正）：
+
+```json
+{
+  "title": "我的赛道",
+  "start": {"x": 0, "y": 0, "yaw": 0},
+  "obstacles": [
+    {"type": "box", "x": 200, "y": 0, "z": 0, "yaw": 30, "w": 20, "d": 160, "h": 200, "color": "#e4572e"},
+    {"type": "cylinder", "x": 100, "y": 80, "z": 0, "r": 20, "h": 150, "color": "#669bbc"},
+    {"type": "gate", "x": 300, "y": 0, "z": 0, "yaw": 0, "w": 100, "h": 150, "t": 8, "color": "#f3a712"}
+  ],
+  "pads": [{"id": 1, "x": 0, "y": 0, "z": 0}]
+}
+```
 
 ## 支持的指令
 
@@ -134,15 +167,27 @@ release 与 debug 签名不同，手机上从 debug 版换成 release 版需要�
 联调测试（需模拟器在运行）：`set TT_SIM_HOST=192.168.0.107 && gradlew.bat testDebugUnitTest`，
 会用 App 的网络层真实连接模拟器，验证指令、状态推送、rc 摇杆和急停打断；模拟器未运行时自动跳过。
 
-## 多机 / 组队模式
+## 双机模式：两部手机各控制一架
 
-```powershell
-tools\setup_network.ps1 -Drones 3      # 管理员 PowerShell
-python -m rmtt_sim --drones 3
-```
+双击 **`start_dual.bat`**（等同 `python -m rmtt_sim --drones 2`），场景中出现两架飞机（#2 在起飞点左侧 1m）：
 
-每架飞机有独立的 IP 与 SN（`0TQZK7SIM00001`…），可用 Python（socket / djitellopy 指定 host）分别控制。
-**注意**：Mind+「组队模式」扩展会在电脑所在局域网中扫描飞机，它能否扫描到环回接口上的 `192.168.10.x`
+| 飞机 | 手机 App 地址 | 本机地址（Mind+ / 脚本） | SN |
+|---|---|---|---|
+| #1 | `电脑IP:8889` | `192.168.10.1:8889` | `0TQZK7SIM00001` |
+| #2 | `电脑IP:8989` | `192.168.10.11:8889` | `0TQZK7SIM00002` |
+
+1. 两部手机都连接与电脑相同的 WiFi，安装 App；
+2. 在连接页的「模拟器飞机」里，手机 A 选 **#1**、手机 B 选 **#2**（会自动填好端口），点连接；
+3. 连接后状态栏显示橙色编号和 SN，确认控制的是哪一架。
+
+两架飞机完全独立：各自的指令、状态推送（8890）、点阵屏和 RGB 灯互不影响；它们之间**会发生碰撞**
+（双方闪红，正在执行的指令返回 `error Collision`）。网页右侧标签页可切换查看每架飞机，`●` 表示已有客户端连接，
+左上角 HUD 同时显示所有飞机的状态。
+
+更多飞机：`python -m rmtt_sim --drones 4`，手机端口依次为 8889 / 8989 / 9089 / 9189
+（`setup_network.ps1` 默认已为 4 架飞机准备好地址和防火墙规则，更多请加 `-Drones N`）。
+
+**Mind+ 组队模式**：组队扩展会在电脑所在局域网中扫描飞机，能否扫描到环回接口上的 `192.168.10.x`
 取决于 Mind+ 的扫描实现，目前未经验证；单机模式不受影响。
 
 ## 常见问题
@@ -166,13 +211,19 @@ python -m rmtt_sim --drones 3
 
 ```
 start.bat                 一键启动（自动配置虚拟 IP）
+start_dual.bat            双机模式启动（两部手机各控制一架）
+scenes/builtin/           内置场景（JSON）
+scenes/user/              你保存的场景
 rmtt_sim/                 模拟器（纯 Python 标准库）
   drone.py                飞行器模型 + SDK 3.0 / EXT 指令解析
   matrix.py               8×8 点阵与 RGB 灯
-  world.py                场景、障碍物、挑战卡、ToF 射线检测
+  world.py                场景几何：长方体 / 圆柱 / 门框、碰撞、ToF 射线检测
+  scenes.py               场景库（加载 / 保存 / 删除）
   simulator.py            仿真循环、UDP 8889/8890
   web.py                  HTTP + SSE 推送给 3D 界面
 web/                      Three.js 3D 前端（three r160 已内置于 web/vendor，离线可用）
+  editor.js               场景编辑器
+  world3d.js              场景对象 → 3D 模型
 tools/setup_network.ps1   添加 / 移除虚拟 IP
 examples/                 模拟 Mind+ 发包的示例程序
 android/                  Android 遥控 App（Kotlin + Compose）
