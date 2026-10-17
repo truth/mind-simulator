@@ -117,9 +117,13 @@ void StartSimulator(AppState& state) {
         if (ok) {
             state.lastStatus = L"启动中 | UDP 8889 | 3D: 8080";
             state.host->SetElementText("lbl_status", state.lastStatus.c_str());
+            state.host->SetElementBackground("indicator_dot", 0xFFF59E0B);
+            state.host->SetElementForeground("lbl_status", 0xFFFBBF24);
         } else {
             state.lastStatus = L"启动失败: 未能启动 Python 进程";
             state.host->SetElementText("lbl_status", state.lastStatus.c_str());
+            state.host->SetElementBackground("indicator_dot", 0xFFEF4444);
+            state.host->SetElementForeground("lbl_status", 0xFFF87171);
             state.processManager.AddLog(L"[管理中心] 启动错误: 找不到 Python 引擎或 CreateProcess 失败。");
         }
     }
@@ -293,6 +297,15 @@ void UpdateUIStatus(AppState& state) {
     if (currentStatus != state.lastStatus) {
         state.lastStatus = currentStatus;
         state.host->SetElementText("lbl_status", currentStatus.c_str());
+        if (running) {
+            // 运行中：翡翠绿指示灯，文字明亮淡绿
+            state.host->SetElementBackground("indicator_dot", 0xFF10B981);
+            state.host->SetElementForeground("lbl_status", 0xFF34D399);
+        } else {
+            // 已停止：中性板岩灰指示灯，文字柔和灰
+            state.host->SetElementBackground("indicator_dot", 0xFF64748B);
+            state.host->SetElementForeground("lbl_status", 0xFF94A3B8);
+        }
     }
 
     // 2. Mind+ 连接状态
@@ -300,6 +313,7 @@ void UpdateUIStatus(AppState& state) {
     if (currentMindplus != state.lastMindplus) {
         state.lastMindplus = currentMindplus;
         state.host->SetElementText("lbl_mindplus_status", currentMindplus.c_str());
+        state.host->SetElementForeground("lbl_mindplus_status", running ? 0xFF10B981 : 0xFF0A84FF);
     }
 
     // 3. 运行时长

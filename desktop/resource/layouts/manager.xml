@@ -32,7 +32,7 @@
     
     <Panel direction="row" alignItems="center" spacing="10">
       <Panel direction="row" alignItems="center" background="#12151C" cornerRadius="14" padding="12,6,12,6">
-        <Panel name="indicator_dot" width="8" height="8" background="#EF4444" cornerRadius="4" margin="0,0,8,0" />
+        <Panel name="indicator_dot" width="8" height="8" background="#64748B" cornerRadius="4" margin="0,0,8,0" />
         <Label name="lbl_status" text="已停止 | UDP 8889 | 3D: 8080" fontSize="12" color="#94A3B8" />
       </Panel>
     </Panel>
