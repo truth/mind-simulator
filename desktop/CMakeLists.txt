@@ -69,6 +69,7 @@ target_link_libraries(RoboMasterTT-Manager PRIVATE
     shlwapi
     iphlpapi
     ws2_32
+    winhttp
 )
 
 # 编译后自动拷贝 resource 资源目录至 exe 旁边

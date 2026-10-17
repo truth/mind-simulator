@@ -1,7 +1,9 @@
 #include "network_detector.h"
 #include "process_manager.h"
 #include "resource.h"
+#include "sim_http_client.h"
 
+#include <layout_parser.h>
 #include <ai_win_ui/host.h>
 #include <ai_win_ui/observable.h>
 
@@ -185,8 +187,26 @@ void UpdateSceneAndFleetLabels(AppState& state) {
     state.host->SetElementText("lbl_cur_scene_badge", (L"当前场景: " + sceneName).c_str());
     state.host->SetElementText("lbl_scene_desc", sceneDesc.c_str());
 
+    // 场景按钮选中状态高亮联动
+    state.host->SetElementBackground("btn_sc_pads",   state.scene == L"pads"   ? 0x212631 : 0x181B22);
+    state.host->SetElementForeground("btn_sc_pads",   state.scene == L"pads"   ? 0xFFFFFF : 0x94A3B8);
+    state.host->SetElementBackground("btn_sc_room",   state.scene == L"room"   ? 0x212631 : 0x181B22);
+    state.host->SetElementForeground("btn_sc_room",   state.scene == L"room"   ? 0xFFFFFF : 0x94A3B8);
+    state.host->SetElementBackground("btn_sc_rings",  state.scene == L"rings"  ? 0x212631 : 0x181B22);
+    state.host->SetElementForeground("btn_sc_rings",  state.scene == L"rings"  ? 0xFFFFFF : 0x94A3B8);
+    state.host->SetElementBackground("btn_sc_forest", state.scene == L"forest" ? 0x212631 : 0x181B22);
+    state.host->SetElementForeground("btn_sc_forest", state.scene == L"forest" ? 0xFFFFFF : 0x94A3B8);
+
     std::wstring dronesBadge = L"当前规模: " + std::to_wstring(state.drones) + L" 台无人机";
     state.host->SetElementText("lbl_cur_drones_badge", dronesBadge.c_str());
+
+    // 机队规模按钮选中状态高亮联动
+    state.host->SetElementBackground("btn_dr_1", state.drones == 1 ? 0x212631 : 0x181B22);
+    state.host->SetElementForeground("btn_dr_1", state.drones == 1 ? 0xFFFFFF : 0x94A3B8);
+    state.host->SetElementBackground("btn_dr_2", state.drones == 2 ? 0x212631 : 0x181B22);
+    state.host->SetElementForeground("btn_dr_2", state.drones == 2 ? 0xFFFFFF : 0x94A3B8);
+    state.host->SetElementBackground("btn_dr_4", state.drones == 4 ? 0x212631 : 0x181B22);
+    state.host->SetElementForeground("btn_dr_4", state.drones == 4 ? 0xFFFFFF : 0x94A3B8);
 
     std::wstring cmd = L"-m rmtt_sim --scene " + state.scene +
                        L" --drones " + std::to_wstring(state.drones) +
@@ -253,36 +273,64 @@ void DrainPendingActions(AppState& state) {
         } else if (actionId == "action_set_scene_pads") {
             state.scene = L"pads";
             state.processManager.AddLog(L"[管理中心] 切换仿真场景为: 挑战卡模式 (pads)");
+            if (state.processManager.IsRunning()) {
+                rmtt::SimHttpClient::PostJsonAsync(8080, L"/api/scene", "{\"name\":\"pads\"}");
+                state.processManager.AddLog(L"[Web实时同步] 已向 3D Web 仿真下发场景切换: pads");
+            }
             UpdateSceneAndFleetLabels(state);
             UpdateUIStatus(state);
         } else if (actionId == "action_set_scene_room") {
             state.scene = L"room";
             state.processManager.AddLog(L"[管理中心] 切换仿真场景为: 室内房间 (room)");
+            if (state.processManager.IsRunning()) {
+                rmtt::SimHttpClient::PostJsonAsync(8080, L"/api/scene", "{\"name\":\"room\"}");
+                state.processManager.AddLog(L"[Web实时同步] 已向 3D Web 仿真下发场景切换: room");
+            }
             UpdateSceneAndFleetLabels(state);
             UpdateUIStatus(state);
         } else if (actionId == "action_set_scene_rings") {
             state.scene = L"rings";
             state.processManager.AddLog(L"[管理中心] 切换仿真场景为: 穿环竞技赛道 (rings)");
+            if (state.processManager.IsRunning()) {
+                rmtt::SimHttpClient::PostJsonAsync(8080, L"/api/scene", "{\"name\":\"rings\"}");
+                state.processManager.AddLog(L"[Web实时同步] 已向 3D Web 仿真下发场景切换: rings");
+            }
             UpdateSceneAndFleetLabels(state);
             UpdateUIStatus(state);
         } else if (actionId == "action_set_scene_forest") {
             state.scene = L"forest";
             state.processManager.AddLog(L"[管理中心] 切换仿真场景为: 室外树林 (forest)");
+            if (state.processManager.IsRunning()) {
+                rmtt::SimHttpClient::PostJsonAsync(8080, L"/api/scene", "{\"name\":\"forest\"}");
+                state.processManager.AddLog(L"[Web实时同步] 已向 3D Web 仿真下发场景切换: forest");
+            }
             UpdateSceneAndFleetLabels(state);
             UpdateUIStatus(state);
         } else if (actionId == "action_set_drones_1") {
             state.drones = 1;
             state.processManager.AddLog(L"[管理中心] 设置无人机仿真规模为: 单机 (1 台)");
+            if (state.processManager.IsRunning()) {
+                rmtt::SimHttpClient::PostJsonAsync(8080, L"/api/drones", "{\"count\":1}");
+                state.processManager.AddLog(L"[Web实时同步] 已向 3D Web 仿真下发机队规模: 1 台");
+            }
             UpdateSceneAndFleetLabels(state);
             UpdateUIStatus(state);
         } else if (actionId == "action_set_drones_2") {
             state.drones = 2;
             state.processManager.AddLog(L"[管理中心] 设置无人机仿真规模为: 双机编队 (2 台)");
+            if (state.processManager.IsRunning()) {
+                rmtt::SimHttpClient::PostJsonAsync(8080, L"/api/drones", "{\"count\":2}");
+                state.processManager.AddLog(L"[Web实时同步] 已向 3D Web 仿真下发机队规模: 2 台");
+            }
             UpdateSceneAndFleetLabels(state);
             UpdateUIStatus(state);
         } else if (actionId == "action_set_drones_4") {
             state.drones = 4;
             state.processManager.AddLog(L"[管理中心] 设置无人机仿真规模为: 四机编队 (4 台)");
+            if (state.processManager.IsRunning()) {
+                rmtt::SimHttpClient::PostJsonAsync(8080, L"/api/drones", "{\"count\":4}");
+                state.processManager.AddLog(L"[Web实时同步] 已向 3D Web 仿真下发机队规模: 4 台");
+            }
             UpdateSceneAndFleetLabels(state);
             UpdateUIStatus(state);
         }
@@ -343,6 +391,76 @@ void UpdateUIStatus(AppState& state) {
         state.host->SetElementText("txt_overview_log", logs.c_str());
         state.host->ScrollToBottom("scroll_console");
         state.host->ScrollToBottom("scroll_overview_log");
+    }
+
+    // 6. 与 Web 运行时双向同步 (当引擎运行中时，每隔 500ms 拉取一次 /api/status)
+    static DWORD lastSyncTick = 0;
+    DWORD now = GetTickCount();
+    if (running && (now - lastSyncTick > 500)) {
+        lastSyncTick = now;
+        std::string jsonText;
+        if (rmtt::SimHttpClient::GetJson(8080, L"/api/status", jsonText)) {
+            JsonValue root = LayoutParser::ParseJson(jsonText);
+            if (root.IsObject()) {
+                if (root["scene"].IsString()) {
+                    std::string sName = root["scene"].stringValue;
+                    std::wstring wsName(sName.begin(), sName.end());
+                    if (wsName != state.scene) {
+                        state.scene = wsName;
+                        state.processManager.AddLog(L"[Web实时同步] 场景已由 3D 页面切换为: " + wsName);
+                        UpdateSceneAndFleetLabels(state);
+                    }
+                }
+                if (root["drones_count"].IsNumber()) {
+                    int dCount = static_cast<int>(root["drones_count"].numberValue);
+                    if (dCount != state.drones) {
+                        state.drones = dCount;
+                        state.processManager.AddLog(L"[Web实时同步] 机队规模已由 3D 页面切换为: " + std::to_wstring(dCount) + L" 台");
+                        UpdateSceneAndFleetLabels(state);
+                    }
+                }
+
+                // 实时更新总览卡片中的飞机数据 (电量、高度、飞行状态、ToF)
+                const JsonValue& drones = root["drones"];
+                if (drones.IsArray() && drones.arrayValue.size() > 0) {
+                    const JsonValue& d1 = drones[static_cast<size_t>(0)];
+                    int bat1 = d1["battery"].IsNumber() ? static_cast<int>(d1["battery"].numberValue) : 100;
+                    float h1 = d1["height"].IsNumber() ? static_cast<float>(d1["height"].numberValue) / 100.0f : 0.0f;
+                    bool flying1 = d1["flying"].IsBool() ? d1["flying"].boolValue : false;
+                    int tof1 = d1["tof_down"].IsNumber() ? static_cast<int>(d1["tof_down"].numberValue) : 0;
+
+                    wchar_t buf[64];
+                    swprintf_s(buf, L"电量: %d%%", bat1);
+                    state.host->SetElementText("drone1_battery", buf);
+                    swprintf_s(buf, L"高度: %.2f m", h1);
+                    state.host->SetElementText("drone1_height", buf);
+                    state.host->SetElementText("drone1_state", flying1 ? L"状态: 飞行中" : L"状态: 地面待命");
+                    swprintf_s(buf, L"ToF: %d cm", tof1);
+                    state.host->SetElementText("drone1_tof", buf);
+
+                    if (drones.arrayValue.size() > 1) {
+                        const JsonValue& d2 = drones[static_cast<size_t>(1)];
+                        int bat2 = d2["battery"].IsNumber() ? static_cast<int>(d2["battery"].numberValue) : 100;
+                        float h2 = d2["height"].IsNumber() ? static_cast<float>(d2["height"].numberValue) / 100.0f : 0.0f;
+                        bool flying2 = d2["flying"].IsBool() ? d2["flying"].boolValue : false;
+                        int tof2 = d2["tof_down"].IsNumber() ? static_cast<int>(d2["tof_down"].numberValue) : 0;
+
+                        swprintf_s(buf, L"电量: %d%%", bat2);
+                        state.host->SetElementText("drone2_battery", buf);
+                        swprintf_s(buf, L"高度: %.2f m", h2);
+                        state.host->SetElementText("drone2_height", buf);
+                        state.host->SetElementText("drone2_state", flying2 ? L"状态: 飞行中" : L"状态: 地面待命");
+                        swprintf_s(buf, L"ToF: %d cm", tof2);
+                        state.host->SetElementText("drone2_tof", buf);
+                    } else {
+                        state.host->SetElementText("drone2_battery", L"未启用 (单机模式)");
+                        state.host->SetElementText("drone2_height", L"高度: --");
+                        state.host->SetElementText("drone2_state", L"状态: 待添加");
+                        state.host->SetElementText("drone2_tof", L"ToF: --");
+                    }
+                }
+            }
+        }
     }
 }
 

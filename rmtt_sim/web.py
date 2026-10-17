@@ -37,6 +37,13 @@ def make_handler(sim):
             if path == "/api/world":
                 with sim.lock:
                     return self._json(sim.world.to_dict())
+            if path == "/api/status":
+                with sim.lock:
+                    return self._json({
+                        "scene": sim.world.scene_id or "pads",
+                        "drones_count": len(sim.drones),
+                        "drones": [d.to_dict() for d in sim.drones]
+                    })
             if path == "/api/scenes":
                 with sim.lock:
                     current = sim.world.scene_id
