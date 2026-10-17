@@ -122,7 +122,9 @@
 
         <!-- 第四行：终端日志输出区 -->
         <Panel direction="column" flexGrow="1" background="#090B0E" cornerRadius="8" padding="10,10,10,10" spacing="0" alignItems="stretch">
-          <RichTextBox name="txt_overview_log" plainText="RoboMaster TT 模拟器管理中心已就绪。点击「启动模拟器」即可运行。" background="#090B0E" borderColor="#1E232E" textColor="#4ADE80" flexGrow="1" />
+          <ScrollViewer name="scroll_overview_log" flexGrow="1" background="#090B0E" barThickness="8" trackColor="#12161F" thumbColor="#334155">
+            <Label name="txt_overview_log" text="RoboMaster TT 模拟器管理中心已就绪。点击「启动模拟器」即可运行。" fontSize="12" color="#4ADE80" />
+          </ScrollViewer>
         </Panel>
       </Panel>
 
@@ -230,7 +232,9 @@
 
         <!-- 终端控制台 -->
         <Panel direction="column" flexGrow="1" background="#090B0E" cornerRadius="8" padding="10,10,10,10" spacing="0" alignItems="stretch">
-          <RichTextBox name="txt_console" plainText="RoboMaster TT 模拟器管理中心已就绪。点击「启动模拟器」即可运行。" background="#090B0E" borderColor="#1E232E" textColor="#4ADE80" flexGrow="1" />
+          <ScrollViewer name="scroll_console" flexGrow="1" background="#090B0E" barThickness="10" trackColor="#12161F" thumbColor="#334155">
+            <Label name="txt_console" text="RoboMaster TT 模拟器管理中心已就绪。点击「启动模拟器」即可运行。" fontSize="12" color="#4ADE80" />
+          </ScrollViewer>
         </Panel>
       </Panel>
 

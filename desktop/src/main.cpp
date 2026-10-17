@@ -232,6 +232,8 @@ void DrainPendingActions(AppState& state) {
                 state.lastLogs.clear();
                 state.host->SetElementText("txt_console", L"");
                 state.host->SetElementText("txt_overview_log", L"");
+                state.host->ScrollToBottom("scroll_console", true);
+                state.host->ScrollToBottom("scroll_overview_log", true);
             }
         } else if (actionId == "action_copy_log") {
             std::wstring logs = state.processManager.GetRecentLogs(500);
@@ -334,11 +336,13 @@ void UpdateUIStatus(AppState& state) {
     }
 
     // 5. 实时日志更新 (同时更新总览速览区与专有控制台)
-    std::wstring logs = state.processManager.GetRecentLogs(60);
+    std::wstring logs = state.processManager.GetRecentLogs(200);
     if (!logs.empty() && logs != state.lastLogs) {
         state.lastLogs = logs;
         state.host->SetElementText("txt_console", logs.c_str());
         state.host->SetElementText("txt_overview_log", logs.c_str());
+        state.host->ScrollToBottom("scroll_console");
+        state.host->ScrollToBottom("scroll_overview_log");
     }
 }
 
