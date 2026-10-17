@@ -1,0 +1,239 @@
+<Panel chrome="custom" direction="column" background="#101216" alignItems="stretch" spacing="0">
+  
+  <!-- 顶部自定义标题栏 (role="titleBar") -->
+  <Panel role="titleBar" direction="row" height="46" background="#14171F" padding="0,0,0,0" spacing="0" alignItems="stretch" justifyContent="spaceBetween">
+    <!-- 左侧：品牌 Logo 与标题 (hitTest="caption" 支持拖动窗口) -->
+    <Panel direction="row" height="46" padding="16,0,12,0" spacing="10" alignItems="center" hitTest="caption" flexGrow="1">
+      <Image source="icons/app.png" width="20" height="20" cornerRadius="4" />
+      <Label text="RoboMaster TT 模拟器管理中心" fontSize="13" color="#FFFFFF" fontWeight="bold" />
+      <Label text="v1.2 原生控制台" fontSize="11" color="#64748B" margin="6,0,0,0" />
+    </Panel>
+    
+    <!-- 右侧：窗口最小化/最大化/关闭按钮 (hitTest="client") -->
+    <Panel direction="row" height="46" width="138" spacing="0" alignItems="stretch">
+      <Button variant="caption-minimize" width="46" height="46" hitTest="client" onClick="windowMinimize" />
+      <Button variant="caption-maximize" width="46" height="46" hitTest="client" onClick="windowMaximize" />
+      <Button variant="caption-close" width="46" height="46" hitTest="client" onClick="windowClose" />
+    </Panel>
+  </Panel>
+
+  <!-- 顶部细分割线 -->
+  <Panel height="1" background="#1E232E" />
+
+  <!-- 全局快捷操作栏 (高度 54px) -->
+  <Panel direction="row" height="54" background="#181B22" padding="16,0,16,0" alignItems="center" justifyContent="spaceBetween">
+    <Panel direction="row" alignItems="center" spacing="10">
+      <Button name="btn_start" text="启动模拟器" background="#10B981" color="#FFFFFF" cornerRadius="6" padding="16,8,16,8" fontSize="13" onClick="action_start" />
+      <Button name="btn_stop" text="停止引擎" background="#EF4444" color="#FFFFFF" cornerRadius="6" padding="16,8,16,8" fontSize="13" onClick="action_stop" />
+      <Button name="btn_restart" text="重启" background="#262D3D" color="#E2E8F0" cornerRadius="6" padding="14,8,14,8" fontSize="13" onClick="action_restart" />
+      <Button name="btn_open_web" text="打开 3D 视窗" background="#0A84FF" color="#FFFFFF" cornerRadius="6" padding="16,8,16,8" fontSize="13" onClick="action_open_web" />
+      <Button name="btn_setup_net" text="一键配置网络" background="#334155" color="#E2E8F0" cornerRadius="6" padding="14,8,14,8" fontSize="13" onClick="action_setup_net" />
+    </Panel>
+    
+    <Panel direction="row" alignItems="center" spacing="10">
+      <Panel direction="row" alignItems="center" background="#12151C" cornerRadius="14" padding="12,6,12,6">
+        <Panel name="indicator_dot" width="8" height="8" background="#EF4444" cornerRadius="4" margin="0,0,8,0" />
+        <Label name="lbl_status" text="已停止 | UDP 8889 | 3D: 8080" fontSize="12" color="#94A3B8" />
+      </Panel>
+    </Panel>
+  </Panel>
+
+  <!-- 细分割线 -->
+  <Panel height="1" background="#1E232E" />
+
+  <!-- 主体工作区：左侧导航侧边栏 + 右侧多标签视图区 -->
+  <Panel direction="row" flexGrow="1" alignItems="stretch" spacing="0">
+    
+    <!-- 左侧导航侧边栏 (宽度 180px) -->
+    <Panel direction="column" width="180" background="#14171E" padding="10,12,10,12" spacing="6" alignItems="stretch">
+      <Button name="btn_nav_overview" text="● 总览与监控" background="#212631" foreground="#FFFFFF" cornerRadius="6" padding="12,10,12,10" fontSize="13" lockColors="true" onClick="nav_overview" />
+      <Button name="btn_nav_fleet" text="○ 场景与多机" background="#14171E" foreground="#94A3B8" cornerRadius="6" padding="12,10,12,10" fontSize="13" lockColors="true" onClick="nav_fleet" />
+      <Button name="btn_nav_network" text="○ 网络环境诊断" background="#14171E" foreground="#94A3B8" cornerRadius="6" padding="12,10,12,10" fontSize="13" lockColors="true" onClick="nav_network" />
+      <Button name="btn_nav_console" text="○ 实时日志控制台" background="#14171E" foreground="#94A3B8" cornerRadius="6" padding="12,10,12,10" fontSize="13" lockColors="true" onClick="nav_console" />
+      
+      <!-- 底部附加说明 -->
+      <Panel direction="column" flexGrow="1" justifyContent="flexEnd" spacing="4">
+        <Label text="Mind+ 实时模式支持" fontSize="11" color="#475569" />
+        <Label text="Tello EDU / ESP32" fontSize="11" color="#475569" />
+      </Panel>
+    </Panel>
+
+    <!-- 垂直分割线 -->
+    <Panel width="1" background="#1E232E" />
+
+    <!-- 右侧多视图容器 (TabControl) -->
+    <TabControl name="main_tabs" headerHeight="0" flexGrow="1" background="#0E1015" borderColor="#0E1015" selectedIndex="0">
+      
+      <!-- Tab 0: 总览与监控视图 -->
+      <Panel direction="column" flexGrow="1" background="#0E1015" padding="16,16,16,16" spacing="12" alignItems="stretch">
+        <!-- 第一行：状态指标 4 张卡片 -->
+        <Panel direction="row" spacing="12" alignItems="stretch">
+          <Panel flexGrow="1" background="#171A22" cornerRadius="8" padding="14,12,14,12" direction="column" spacing="4">
+            <Label text="Mind+ 连接状态" fontSize="11" color="#94A3B8" />
+            <Label name="lbl_mindplus_status" text="待连接 (192.168.10.1)" fontSize="15" color="#0A84FF" fontWeight="bold" />
+          </Panel>
+          <Panel flexGrow="1" background="#171A22" cornerRadius="8" padding="14,12,14,12" direction="column" spacing="4">
+            <Label text="虚拟网卡环境" fontSize="11" color="#94A3B8" />
+            <Label name="lbl_net_status" text="检测中..." fontSize="15" color="#10B981" fontWeight="bold" />
+          </Panel>
+          <Panel flexGrow="1" background="#171A22" cornerRadius="8" padding="14,12,14,12" direction="column" spacing="4">
+            <Label text="当前仿真场景" fontSize="11" color="#94A3B8" />
+            <Label name="lbl_scene_info" text="挑战卡模式 (pads)" fontSize="15" color="#FFFFFF" fontWeight="bold" />
+          </Panel>
+          <Panel flexGrow="1" background="#171A22" cornerRadius="8" padding="14,12,14,12" direction="column" spacing="4">
+            <Label text="引擎运行时长" fontSize="11" color="#94A3B8" />
+            <Label name="lbl_uptime" text="00:00:00" fontSize="15" color="#FFFFFF" fontWeight="bold" />
+          </Panel>
+        </Panel>
+
+        <!-- 第二行：飞机状态卡片网格 -->
+        <Panel direction="row" spacing="12" alignItems="stretch">
+          <!-- 飞机 #1 -->
+          <Panel flexGrow="1" background="#171A22" cornerRadius="8" padding="12,10,12,10" direction="column" spacing="6">
+            <Panel direction="row" justifyContent="spaceBetween" alignItems="center">
+              <Label text="✈ 飞机 #1 (192.168.10.1:8889)" fontSize="13" color="#FFFFFF" fontWeight="bold" />
+              <Label name="drone1_battery" text="电量: 100%" fontSize="12" color="#10B981" />
+            </Panel>
+            <Panel direction="row" spacing="16">
+              <Label name="drone1_height" text="高度: 0.00 m" fontSize="12" color="#94A3B8" />
+              <Label name="drone1_state" text="状态: 地面待命" fontSize="12" color="#94A3B8" />
+              <Label name="drone1_tof" text="ToF: -- cm" fontSize="12" color="#94A3B8" />
+            </Panel>
+          </Panel>
+          <!-- 飞机 #2 -->
+          <Panel flexGrow="1" background="#171A22" cornerRadius="8" padding="12,10,12,10" direction="column" spacing="6">
+            <Panel direction="row" justifyContent="spaceBetween" alignItems="center">
+              <Label text="✈ 飞机 #2 (192.168.10.11:8989)" fontSize="13" color="#FFFFFF" fontWeight="bold" />
+              <Label name="drone2_battery" text="电量: 100%" fontSize="12" color="#10B981" />
+            </Panel>
+            <Panel direction="row" spacing="16">
+              <Label name="drone2_height" text="高度: 0.00 m" fontSize="12" color="#94A3B8" />
+              <Label name="drone2_state" text="状态: 地面待命" fontSize="12" color="#94A3B8" />
+              <Label name="drone2_tof" text="ToF: -- cm" fontSize="12" color="#94A3B8" />
+            </Panel>
+          </Panel>
+        </Panel>
+
+        <!-- 第三行：控制台标题与快捷清空 -->
+        <Panel direction="row" justifyContent="spaceBetween" alignItems="center">
+          <Label text="运行日志速览 (Python Stdout &amp; Mind+ UDP 指令)" fontSize="12" color="#94A3B8" />
+          <Button name="btn_clear_log" text="清空日志" background="#212631" color="#94A3B8" cornerRadius="4" padding="8,2,8,2" fontSize="11" onClick="action_clear_log" />
+        </Panel>
+
+        <!-- 第四行：终端日志输出区 -->
+        <Panel direction="column" flexGrow="1" background="#090B0E" cornerRadius="8" padding="10,10,10,10" spacing="0" alignItems="stretch">
+          <RichTextBox name="txt_overview_log" plainText="RoboMaster TT 模拟器管理中心已就绪。点击「启动模拟器」即可运行。" background="#090B0E" borderColor="#1E232E" textColor="#4ADE80" flexGrow="1" />
+        </Panel>
+      </Panel>
+
+      <!-- Tab 1: 场景与多机配置视图 -->
+      <Panel direction="column" flexGrow="1" background="#0E1015" padding="16,16,16,16" spacing="14" alignItems="stretch">
+        <Panel direction="column" spacing="4">
+          <Label text="仿真场景与机队规模配置" fontSize="16" color="#FFFFFF" fontWeight="bold" />
+          <Label text="在引擎启动前选择物理仿真场景与无人机数量，适配不同比赛与教学编程项目。" fontSize="12" color="#64748B" />
+        </Panel>
+
+        <!-- 场景选择卡片 -->
+        <Panel direction="column" background="#171A22" cornerRadius="8" padding="16,14,16,14" spacing="10">
+          <Panel direction="row" justifyContent="spaceBetween" alignItems="center">
+            <Label text="选择三维仿真场景 (Scene)" fontSize="13" color="#FFFFFF" fontWeight="bold" />
+            <Label name="lbl_cur_scene_badge" text="当前场景: 挑战卡模式 (pads)" fontSize="12" color="#0A84FF" />
+          </Panel>
+          <Panel direction="row" spacing="10" alignItems="center">
+            <Button name="btn_sc_pads" text="挑战卡场地 (pads)" background="#212631" color="#FFFFFF" cornerRadius="6" padding="14,10,14,10" fontSize="12" onClick="action_set_scene_pads" />
+            <Button name="btn_sc_room" text="室内封闭房间 (room)" background="#181B22" color="#94A3B8" cornerRadius="6" padding="14,10,14,10" fontSize="12" onClick="action_set_scene_room" />
+            <Button name="btn_sc_rings" text="穿环竞技赛道 (rings)" background="#181B22" color="#94A3B8" cornerRadius="6" padding="14,10,14,10" fontSize="12" onClick="action_set_scene_rings" />
+            <Button name="btn_sc_forest" text="室外开阔树林 (forest)" background="#181B22" color="#94A3B8" cornerRadius="6" padding="14,10,14,10" fontSize="12" onClick="action_set_scene_forest" />
+          </Panel>
+          <Label name="lbl_scene_desc" text="描述：挑战卡场地包含地面与空中定位标签，支持视觉识别、Mission Pad 测距与精准降落。" fontSize="11" color="#64748B" />
+        </Panel>
+
+        <!-- 机队规模卡片 -->
+        <Panel direction="column" background="#171A22" cornerRadius="8" padding="16,14,16,14" spacing="10">
+          <Panel direction="row" justifyContent="spaceBetween" alignItems="center">
+            <Label text="无人机仿真数量 (Fleet Size)" fontSize="13" color="#FFFFFF" fontWeight="bold" />
+            <Label name="lbl_cur_drones_badge" text="当前规模: 1 台无人机" fontSize="12" color="#10B981" />
+          </Panel>
+          <Panel direction="row" spacing="10" alignItems="center">
+            <Button name="btn_dr_1" text="单机仿真 (1 台)" background="#212631" color="#FFFFFF" cornerRadius="6" padding="14,10,14,10" fontSize="12" onClick="action_set_drones_1" />
+            <Button name="btn_dr_2" text="双机编队 (2 台)" background="#181B22" color="#94A3B8" cornerRadius="6" padding="14,10,14,10" fontSize="12" onClick="action_set_drones_2" />
+            <Button name="btn_dr_4" text="四机编队 (4 台)" background="#181B22" color="#94A3B8" cornerRadius="6" padding="14,10,14,10" fontSize="12" onClick="action_set_drones_4" />
+          </Panel>
+          <Label text="说明：多机编队模式将分配虚拟 IP 192.168.10.1 (主)、192.168.10.11 等，支持集群控制。" fontSize="11" color="#64748B" />
+        </Panel>
+
+        <!-- 启动参数预览卡片 -->
+        <Panel direction="column" background="#14171E" cornerRadius="8" padding="14,12,14,12" spacing="6">
+          <Label text="启动命令行参数预览" fontSize="12" color="#94A3B8" />
+          <Label name="lbl_cmdline_preview" text="-m rmtt_sim --scene pads --drones 1 --no-browser" fontSize="12" color="#4ADE80" />
+        </Panel>
+      </Panel>
+
+      <!-- Tab 2: 网络环境诊断视图 -->
+      <Panel direction="column" flexGrow="1" background="#0E1015" padding="16,16,16,16" spacing="14" alignItems="stretch">
+        <Panel direction="column" spacing="4">
+          <Label text="Mind+ 与无人机网络环境诊断" fontSize="16" color="#FFFFFF" fontWeight="bold" />
+          <Label text="Mind+ 与真实 Tello EDU 无人机采用 192.168.10.1 网段通信。本工具可一键配置虚拟回环 IP。" fontSize="12" color="#64748B" />
+        </Panel>
+
+        <!-- 诊断列表卡片 -->
+        <Panel direction="column" background="#171A22" cornerRadius="8" padding="16,14,16,14" spacing="12">
+          <Label text="网络适配器与端口监听状态" fontSize="13" color="#FFFFFF" fontWeight="bold" />
+          
+          <Panel direction="row" spacing="12" alignItems="stretch">
+            <Panel flexGrow="1" background="#12151C" cornerRadius="6" padding="12,10,12,10" direction="column" spacing="4">
+              <Label text="主无人机虚拟 IP" fontSize="11" color="#94A3B8" />
+              <Label name="lbl_net_ip1" text="192.168.10.1" fontSize="14" color="#FFFFFF" fontWeight="bold" />
+              <Label name="lbl_net_ip1_status" text="检测中..." fontSize="11" color="#10B981" />
+            </Panel>
+            <Panel flexGrow="1" background="#12151C" cornerRadius="6" padding="12,10,12,10" direction="column" spacing="4">
+              <Label text="编队副机虚拟 IP" fontSize="11" color="#94A3B8" />
+              <Label name="lbl_net_ip2" text="192.168.10.11" fontSize="14" color="#FFFFFF" fontWeight="bold" />
+              <Label name="lbl_net_ip2_status" text="检测中..." fontSize="11" color="#10B981" />
+            </Panel>
+            <Panel flexGrow="1" background="#12151C" cornerRadius="6" padding="12,10,12,10" direction="column" spacing="4">
+              <Label text="SDK UDP 通信端口" fontSize="11" color="#94A3B8" />
+              <Label text="8889 / 8890" fontSize="14" color="#FFFFFF" fontWeight="bold" />
+              <Label text="UDP 监听就绪" fontSize="11" color="#0A84FF" />
+            </Panel>
+            <Panel flexGrow="1" background="#12151C" cornerRadius="6" padding="12,10,12,10" direction="column" spacing="4">
+              <Label text="三维视窗服务" fontSize="11" color="#94A3B8" />
+              <Label text="HTTP 8080" fontSize="14" color="#FFFFFF" fontWeight="bold" />
+              <Label text="Web 3D 渲染" fontSize="11" color="#0A84FF" />
+            </Panel>
+          </Panel>
+        </Panel>
+
+        <!-- 一键修复操作区 -->
+        <Panel direction="column" background="#171A22" cornerRadius="8" padding="16,14,16,14" spacing="10">
+          <Label text="一键配置与修复" fontSize="13" color="#FFFFFF" fontWeight="bold" />
+          <Label text="若 Mind+ 无法连接或提示「未发现无人机」，请点击下方按钮为本地网络适配器自动添加 192.168.10.1 虚拟 IP 地址与防火墙放行规则（需要管理员权限）。" fontSize="12" color="#94A3B8" />
+          <Panel direction="row" spacing="10" margin="4,0,0,0">
+            <Button name="btn_exec_setup_net" text="一键配置网络环境 (UAC 提权)" background="#0A84FF" color="#FFFFFF" cornerRadius="6" padding="16,10,16,10" fontSize="13" onClick="action_setup_net" />
+            <Button name="btn_recheck_net" text="重新检测网络状态" background="#262D3D" color="#E2E8F0" cornerRadius="6" padding="14,10,14,10" fontSize="13" onClick="action_recheck_net" />
+          </Panel>
+        </Panel>
+      </Panel>
+
+      <!-- Tab 3: 完整实时日志控制台视图 -->
+      <Panel direction="column" flexGrow="1" background="#0E1015" padding="16,16,16,16" spacing="10" alignItems="stretch">
+        <Panel direction="row" justifyContent="spaceBetween" alignItems="center">
+          <Panel direction="column" spacing="2">
+            <Label text="实时日志与控制台终端" fontSize="16" color="#FFFFFF" fontWeight="bold" />
+            <Label text="捕获底层 Python 引擎标准输出 (stdout/stderr) 与 Mind+ SDK UDP 报文。" fontSize="12" color="#64748B" />
+          </Panel>
+          <Panel direction="row" spacing="8">
+            <Button name="btn_copy_log" text="复制日志" background="#262D3D" color="#E2E8F0" cornerRadius="6" padding="12,6,12,6" fontSize="12" onClick="action_copy_log" />
+            <Button name="btn_clear_log_full" text="清空控制台" background="#212631" color="#EF4444" cornerRadius="6" padding="12,6,12,6" fontSize="12" onClick="action_clear_log" />
+          </Panel>
+        </Panel>
+
+        <!-- 终端控制台 -->
+        <Panel direction="column" flexGrow="1" background="#090B0E" cornerRadius="8" padding="10,10,10,10" spacing="0" alignItems="stretch">
+          <RichTextBox name="txt_console" plainText="RoboMaster TT 模拟器管理中心已就绪。点击「启动模拟器」即可运行。" background="#090B0E" borderColor="#1E232E" textColor="#4ADE80" flexGrow="1" />
+        </Panel>
+      </Panel>
+
+    </TabControl>
+  </Panel>
+</Panel>

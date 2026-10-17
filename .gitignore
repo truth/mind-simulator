@@ -2,6 +2,8 @@ __pycache__/
 *.pyc
 .cache/
 dist/
+runtime/
+desktop/build/
 
 # 发布签名（绝不提交）
 *.jks

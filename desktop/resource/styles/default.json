@@ -1,0 +1,19 @@
+{
+  "import": ["buttons.json", "cards.json"],
+  "styles": {
+    "hubPanel": {
+      "base": {
+        "background": "#0B121A",
+        "padding": [24, 24, 24, 24]
+      }
+    },
+    "shapePreview": {
+      "base": {
+        "background": "#1A2332",
+        "cornerRadius": 12,
+        "border": { "width": 1, "color": "#2C3A47" },
+        "padding": [12, 12, 12, 12]
+      }
+    }
+  }
+}

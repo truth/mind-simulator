@@ -1,0 +1,57 @@
+{
+  "colors": {
+    "surface-0":     "#F4F6FA",
+    "surface-1":     "#FFFFFF",
+    "surface-2":     "#EEF2F8",
+    "surface-3":     "#E2E8F2",
+    "surface-4":     "#D5DCE8",
+
+    "border":        "#A0AEC0",
+    "border-subtle": "#C5D0DE",
+    "border-focus":  "#2B6CB0",
+
+    "fg":            "#1A202C",
+    "fg-strong":     "#0F172A",
+    "fg-muted":      "#4A5568",
+    "fg-dim":        "#718096",
+
+    "accent":        "#2B6CB0",
+    "accent-soft":   "#BEE3F8",
+    "success":       "#276749",
+    "warning":       "#B7791F",
+    "danger":        "#C53030",
+
+    "btn-bg":        "#E2E8F0",
+    "btn-bg-hover":  "#CBD5E0",
+    "btn-bg-press":  "#90CDF4",
+    "input-bg":      "#FFFFFF"
+  },
+  "spacings": {
+    "xs":  4,
+    "sm":  8,
+    "md":  12,
+    "lg":  16,
+    "xl":  24,
+    "2xl": 32
+  },
+  "radii": {
+    "sm":  4,
+    "md":  8,
+    "lg":  12,
+    "xl":  16
+  },
+  "fontSizes": {
+    "xs":   11,
+    "sm":   12,
+    "base": 14,
+    "lg":   16,
+    "xl":   18,
+    "2xl":  22,
+    "3xl":  28
+  },
+  "borderWidths": {
+    "thin":   1,
+    "medium": 2,
+    "thick":  4
+  }
+}

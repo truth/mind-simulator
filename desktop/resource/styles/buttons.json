@@ -1,0 +1,58 @@
+{
+  "styles": {
+    "primaryButton": {
+      "base": {
+        "background": "$color.accent",
+        "cornerRadius": "$radius.md",
+        "border": { "width": 1, "color": "$color.accent" },
+        "foreground": "$color.fg-strong",
+        "fontSize": "$fontSize.base",
+        "padding": [14, 8, 14, 8]
+      },
+      "hover": {
+        "background": "$color.accent-soft"
+      },
+      "pressed": {
+        "background": "$color.accent"
+      },
+      "focused": {
+        "border": { "width": 2, "color": "$color.border-focus" }
+      },
+      "disabled": {
+        "background": "$color.surface-3",
+        "foreground": "$color.fg-dim",
+        "opacity": 0.7
+      }
+    },
+    "secondaryButton": {
+      "base": {
+        "background": "$color.surface-2",
+        "cornerRadius": "$radius.md",
+        "border": { "width": 1, "color": "$color.border-subtle" },
+        "foreground": "$color.fg",
+        "fontSize": "$fontSize.base",
+        "padding": [14, 8, 14, 8]
+      },
+      "hover": {
+        "background": "$color.surface-3"
+      },
+      "pressed": {
+        "background": "$color.surface-1"
+      }
+    },
+    "dangerButton": {
+      "extend": "$style.primaryButton",
+      "base": {
+        "background": "$color.danger",
+        "border": { "width": 1, "color": "$color.danger" },
+        "foreground": "$color.fg-strong"
+      },
+      "hover": {
+        "background": "$color.danger"
+      },
+      "pressed": {
+        "background": "$color.danger"
+      }
+    }
+  }
+}
