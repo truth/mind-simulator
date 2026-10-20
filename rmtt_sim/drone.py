@@ -5,6 +5,7 @@
 
 import math
 import random
+import re
 import time
 from collections import deque
 
@@ -21,6 +22,7 @@ MIN_FLY_HEIGHT = 20.0   # 飞行时距支撑面的最低高度
 TOF_MAX_MM = 1200       # 前向 ToF 量程，超出返回 8192
 TOF_OUT_OF_RANGE = 8192
 GRAVITY = 980.0
+RE_PREFIX = re.compile(r"^Re([0-9a-fA-F]{2})([0-9a-fA-F]{2})\s+(.+)$")
 
 
 def _deg_norm(a):
@@ -185,6 +187,7 @@ class Drone:
         self.mdirection = 0
         self.task = None
         self.last_cmd_t = time.time()
+        self.re_tag = None
         self.collision_t = 0.0
         self._collided = False
         self._landing = False
@@ -348,6 +351,22 @@ class Drone:
         if not cmd:
             return
         self.last_cmd_t = time.time()
+
+        # 防丢包序号 "Re[tag][id] 指令"（Mind+ 实时模式每条指令以同一 tag 连发 5 遍）：
+        # 同一 tag 只执行一次；ok / error 回复带上 "Re[tag][id] " 前缀，查询结果原样返回
+        m = RE_PREFIX.match(cmd)
+        if m:
+            tag, seq, cmd = m.group(1), m.group(1) + m.group(2), m.group(3)
+            if tag == self.re_tag:
+                return
+            self.re_tag = tag
+            plain_reply = reply
+
+            def reply(text):
+                if text == "ok" or text.startswith("error"):
+                    text = "Re%s %s" % (seq, text)
+                plain_reply(text)
+
         parts = cmd.split()
         key = parts[0].lower()
 

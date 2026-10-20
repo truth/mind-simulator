@@ -150,6 +150,21 @@ class DroneTest(unittest.TestCase):
         self.assertTrue(out[1].isdigit())
         self.assertEqual(len(out), 2)
 
+    def test_re_prefix(self):
+        # Mind+ 1.x 实时模式：同一 tag 连发 5 遍，只执行一次
+        h = Harness()
+        out = []
+        for i in range(1, 6):
+            h.d.handle("Re100%d takeoff" % i, out.append)
+        while h.d.task:
+            h.d.update(0.02)
+        self.assertEqual(out, ["Re1001 ok"])
+        self.assertTrue(h.d.flying)
+        self.assertEqual(h.send("Re1101 up 50"), "Re1101 ok")
+        self.assertAlmostEqual(h.d.pos[2], 130, delta=1)
+        self.assertEqual(h.send("Re1201 forward 5"), "Re1201 error Out of range")
+        self.assertTrue(h.send("Re1301 battery?").isdigit())
+
 
 if __name__ == "__main__":
     unittest.main()
