@@ -631,6 +631,13 @@ class Drone:
                 _LazyRotate(), CallSeg(check)]
         self._start_task(cmd, segs, reply)
 
+    def _c_setyaw(self, a, cmd, reply):
+        """setyaw yaw mid：旋转到挑战卡坐标系下的航向 yaw（挑战卡坐标系与世界坐标系同向，同 jump）。"""
+        self._require_flying()
+        yaw = self._num(a[0], -360, 360)
+        self._resolve_pad(a[1])
+        self._start_task(cmd, [RotateSeg(_deg_norm(yaw - self.yaw))], reply)
+
     def _c_rc(self, a, cmd, reply):
         vals = tuple(max(-100.0, min(100.0, float(v))) for v in a[:4])
         if len(vals) != 4:

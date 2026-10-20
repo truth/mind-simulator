@@ -242,7 +242,7 @@ App 会记住上次的地址；空闲时每 10 秒发送一次 `rc 0 0 0 0` 保�
 
 **控制**：`command` `takeoff` `land` `emergency` `stop` `motoron` `motoroff` `throwfly`
 `up/down/left/right/forward/back x` `cw/ccw x` `flip l/r/f/b` `go x y z speed [mid]`
-`curve x1 y1 z1 x2 y2 z2 speed [mid]` `jump x y z speed yaw mid1 mid2` `rc a b c d` `speed x`
+`curve x1 y1 z1 x2 y2 z2 speed [mid]` `jump x y z speed yaw mid1 mid2` `setyaw yaw mid` `rc a b c d` `speed x`
 `mon` `moff` `mdirection x` `streamon` `streamoff` `wifi` `ap` `multiwifi` `port` `setfps` `setbitrate` `setresolution` `wifisetchannel`
 
 ### 视频流
@@ -373,7 +373,7 @@ python -m rmtt_sim [--scene 场景id] [--drones N] [--auto-land 15]
 - 只模拟 **实时模式**。上传模式（把 Arduino / MicroPython 程序烧录到 ESP32）需要模拟 ESP32 芯片本身，不在本项目范围内。
 - 视频流依赖浏览器中打开的 3D 界面（WebCodecs 编码），关闭 3D 界面后 `streamon` 仍回复 `ok` 但不出画面；后台时帧率降到约 15 fps。
 - 飞行动力学为运动学近似（匀速移动 + 视觉倾角），不模拟风、漂移与定位误差。
-- 已用 Mind+ V1.8.1 实测连接与起飞 / 升降 / 前后飞行 / 降落积木，其余积木**尚未逐个验证**；
+- 已用 Mind+ V1.8.1 实测连接与起飞 / 升降 / 前后飞行 / 旋转 / 降落 / 开启摄像头（「Tello视频」弹窗出画面）积木，其余积木**尚未逐个验证**；
   若发现某个积木的回复格式不被 Mind+ 接受，请查看网页日志中的收发记录并调整 `rmtt_sim/drone.py`。
 - 带 `Re` 序号的查询指令（如「查询电量（活跃）」）按无前缀格式回复数值，真机是否带前缀未经核实。
 
@@ -444,6 +444,7 @@ keyPassword=******
 
 ## 更新记录
 
+- **挑战卡航向旋转**：支持 `setyaw yaw mid`（Mind+「挑战卡航向旋转」积木），需先开启挑战卡探测；文档补充 Mind+ 中控制旋转角速度的方法。
 - **Mind+ 对接文档与调试工具**：新增 [docs/mindplus-integration.md](docs/mindplus-integration.md)（版本选择、连接机制、补丁原理与移植、`Re` 序号、视频链路、问题排查、扩展指南、代码位置速查）；新增 `tools/video_check.py`、`tools/mindplus_wfs_test/`。
 - **机载摄像头视频流**：`streamon` 后输出真机格式的 H.264 视频流到客户端 UDP 11111，Mind+「开启 Tello 摄像头」可显示模拟器画面；3D 界面最小化或被遮挡时继续推流；机载画面（画中画 / 视频流）不再显示 ToF 光束等辅助图形。
 - **Mind+ 1.x 实测打通**：支持 Mind+ 实时模式的 `Re[tag][id] 指令` 防丢包序号（同一 tag 连发 5 遍只执行一次，

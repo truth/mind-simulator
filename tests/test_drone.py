@@ -164,6 +164,21 @@ class DroneTest(unittest.TestCase):
         self.assertAlmostEqual(h.d.pos[2], 130, delta=1)
         self.assertEqual(h.send("Re1201 forward 5"), "Re1201 error Out of range")
         self.assertTrue(h.send("Re1301 battery?").isdigit())
+        # 遥控器杆量积木：rc 也带序号，无回复
+        self.assertIsNone(h.send("Re1401 rc 0 0 0 50"))
+        self.assertEqual(h.d.rc, (0.0, 0.0, 0.0, 50.0))
+
+    def test_setyaw(self):
+        h = Harness("pads")
+        h.send("takeoff")
+        self.assertEqual(h.send("setyaw 90 m-1"), "error No valid marker")   # 未开启挑战卡探测
+        h.send("mon")
+        h.send("cw 30")
+        self.assertEqual(h.send("setyaw 90 m-1"), "ok")
+        self.assertAlmostEqual(h.d.yaw % 360, 90, delta=0.1)
+        self.assertEqual(h.send("Re1001 setyaw -90 m1"), "Re1001 ok")    # 起飞点正下方是 1 号卡
+        self.assertAlmostEqual(h.d.yaw % 360, 270, delta=0.1)
+        self.assertEqual(h.send("setyaw 0 m5"), "error No valid marker")  # 看不到 5 号卡
 
 
 if __name__ == "__main__":
