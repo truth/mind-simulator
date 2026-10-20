@@ -194,3 +194,38 @@ class DiscoveryTest(unittest.TestCase):
             s.close()
             disc.close()
             sim.shutdown()
+
+
+class VideoTest(unittest.TestCase):
+    def test_push_video_packets(self):
+        import socket
+        from rmtt_sim import simulator
+        recv = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        recv.bind(("127.0.0.1", 0))
+        recv.settimeout(2)
+        old_port = simulator.VIDEO_PORT
+        simulator.VIDEO_PORT = recv.getsockname()[1]
+        sim = simulator.Simulator(["10.0.0.1"], scene="empty", udp=False, count=1)
+        try:
+            d = sim.drones[0]
+            frame = bytes(range(256)) * 12   # 3072 字节 → 1460 + 1460 + 152
+            self.assertFalse(sim.push_video(0, frame))   # 未 streamon：丢弃
+            d.client = ("127.0.0.1", 8889)
+            d.handle("streamon", lambda r: None)
+            self.assertTrue(sim.push_video(0, frame))
+            sizes = [len(recv.recvfrom(2048)[0]) for _ in range(3)]
+            self.assertEqual(sizes, [1460, 1460, 152])
+            # 帧长恰为 1460 的整数倍：补空包标记帧结束
+            self.assertTrue(sim.push_video(0, b"x" * 1460))
+            self.assertEqual([len(recv.recvfrom(2048)[0]) for _ in range(2)], [1460, 0])
+            self.assertFalse(sim.push_video(5, frame))   # 不存在的飞机
+        finally:
+            simulator.VIDEO_PORT = old_port
+            recv.close()
+            sim.shutdown()
+
+    def test_strip_svc_nal(self):
+        from rmtt_sim.simulator import strip_svc_nal
+        sps, prefix, idr = b"\x00\x00\x00\x01\x67AB", b"\x00\x00\x00\x01\x6e\x01\x02", b"\x00\x00\x01\x65CD"
+        self.assertEqual(strip_svc_nal(sps + prefix + idr), sps + idr)
+        self.assertEqual(strip_svc_nal(b"raw"), b"raw")

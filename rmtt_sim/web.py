@@ -6,7 +6,7 @@ import os
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 WEB_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "web")
 FRAME_HZ = 30
@@ -84,8 +84,17 @@ def make_handler(sim):
                 pass
 
         def do_POST(self):
-            path = urlparse(self.path).path
+            url = urlparse(self.path)
+            path = url.path
             n = int(self.headers.get("Content-Length") or 0)
+            if path == "/api/video":
+                # 请求体是一帧 H.264 Annex-B 数据，不是 JSON
+                body = self.rfile.read(n)
+                try:
+                    index = int(parse_qs(url.query).get("drone", ["0"])[0])
+                except ValueError:
+                    return self._json({"error": "bad drone"}, 400)
+                return self._json({"sent": sim.push_video(index, body)})
             try:
                 data = json.loads(self.rfile.read(n) or b"{}")
             except ValueError:

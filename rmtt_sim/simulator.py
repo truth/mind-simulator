@@ -1,5 +1,6 @@
 """仿真器主体：世界 + 多架飞机 + 仿真循环 + UDP 端点。"""
 
+import re
 import socket
 import threading
 import time
@@ -11,8 +12,30 @@ from .world import World
 
 CMD_PORT = 8889
 STATE_PORT = 8890
+VIDEO_PORT = 11111
+VIDEO_PACKET = 1460   # 真机按 1460 字节分片发送 H.264，客户端（如 Mind+）以不足 1460 字节的分片作为一帧结束
 SIM_HZ = 60
 STATE_HZ = 10
+
+
+_NAL_START = re.compile(rb"\x00\x00\x00\x01|\x00\x00\x01")
+
+
+def strip_svc_nal(data):
+    """去掉 H.264 Annex-B 码流中的 SVC 前缀 / 扩展 NAL（类型 14 / 20）。
+
+    浏览器编码器（OpenH264）会附带这类单元，真机码流中没有，部分客户端解码器不认。"""
+    starts = [m.start() for m in _NAL_START.finditer(data)]
+    if not starts:
+        return data
+    out = [data[:starts[0]]]
+    for a, b in zip(starts, starts[1:] + [len(data)]):
+        unit = data[a:b]
+        head = 4 if unit.startswith(b"\x00\x00\x00\x01") else 3
+        if len(unit) > head and unit[head] & 0x1F in (14, 20):
+            continue
+        out.append(unit)
+    return b"".join(out)
 
 
 def lan_port(index):
@@ -129,6 +152,8 @@ class Simulator:
         self.drones = []
         self.endpoints = []
         self.lan_endpoints = []  # [(drone_index, ip, port)]
+        self.video_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.video_targets = {}  # 飞机序号 → 当前视频流目标地址（用于记录日志）
         for _ in range(count or len(self.ip_pool)):
             self._add_drone()
         threading.Thread(target=self._sim_loop, daemon=True, name="sim").start()
@@ -238,6 +263,29 @@ class Simulator:
                     "lan": [{"drone": i, "addr": "%s:%d" % (ip, port)} for i, ip, port in self.lan_endpoints
                             if ip != "127.0.0.1"]}
 
+    def push_video(self, index, data):
+        """转发 3D 界面编码好的一帧 H.264 到客户端 UDP 11111。飞机未 streamon 或尚无客户端时丢弃，返回是否已发送。"""
+        with self.lock:
+            d = self.drones[index] if 0 <= index < len(self.drones) else None
+            target = (d.client[0], VIDEO_PORT) if d and d.stream and d.client else None
+            if self.video_targets.get(index) != target:
+                self.video_targets[index] = target
+                if target:
+                    self.log(index, "info", "视频流 → %s:%d（H.264，需保持 3D 界面打开）" % target)
+        if not target:
+            return False
+        data = strip_svc_nal(data)
+        try:
+            for n, i in enumerate(range(0, len(data), VIDEO_PACKET)):
+                if n and n % 8 == 0:
+                    time.sleep(0.001)  # 关键帧有几十个分片，匀速发出，避免客户端默认接收缓冲区溢出丢包
+                self.video_sock.sendto(data[i:i + VIDEO_PACKET], target)
+            if len(data) % VIDEO_PACKET == 0:
+                self.video_sock.sendto(b"", target)  # 帧长恰为 1460 的整数倍时补一个空包标记帧结束
+        except OSError:
+            return False
+        return True
+
     def run_command(self, index, cmd, timeout=120.0):
         """从 Web 控制台执行指令，阻塞直到收到回复（rc 等无回复指令立即返回）。"""
         done = threading.Event()
@@ -313,3 +361,4 @@ class Simulator:
         self.running = False
         for ep in self.endpoints:
             ep.close()
+        self.video_sock.close()

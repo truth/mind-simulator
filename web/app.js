@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { OrbitControls } from './vendor/OrbitControls.js';
 import { buildWorld } from './world3d.js';
 import { createEditor } from './editor.js';
+import { createVideoStreamer } from './video.js';
 
 const $ = (id) => document.getElementById(id);
 const toV3 = (p) => new THREE.Vector3(p[0] / 100, p[2] / 100, -p[1] / 100);
@@ -543,7 +544,8 @@ function updatePanel(t) {
   }
   $('hud').hidden = !settings.hud;
   $('pip').hidden = !settings.pip;
-  $('pipLabel').textContent = s.stream ? 'TT 摄像头 ● 视频流已开启' : 'TT 摄像头（streamoff）';
+  const vs = video.status(selected);
+  $('pipLabel').textContent = s.stream ? `TT 摄像头 ● 视频流已开启${vs ? '（' + vs + '）' : ''}` : 'TT 摄像头（streamoff）';
 }
 
 // ------------------------------------------------------------------ 日志
@@ -789,16 +791,46 @@ function placeFpv(cam, d) {
   cam.lookAt(look);
 }
 
+// streamon 后把机载画面编码为 H.264 推给客户端（UDP 11111）
+const video = createVideoStreamer({ scene, fpvCam, placeFpv, hideWhileRendering: renderOnboard });
+
+// 机载摄像头画面（画中画与视频流）：隐藏本机模型，以及编辑手柄、ToF 光束、轨迹、编号标签等界面辅助图形
+function renderOnboard(d, render) {
+  const helpers = [editor.gizmo, ...drones.flatMap((x) => [x.beam, x.trail, x.label])];
+  const shown = helpers.map((o) => o.visible);
+  helpers.forEach((o) => { o.visible = false; });
+  d.root.visible = false;
+  render();
+  d.root.visible = true;
+  helpers.forEach((o, i) => { o.visible = shown[i]; });
+}
+
 const clock = new THREE.Clock();
 const chasePos = new THREE.Vector3();
 function frame() {
   requestAnimationFrame(frame);
+  if (!document.hidden) step();
+}
+
+// 页面被隐藏（最小化、切到其他标签页、被 Mind+ 等窗口完全遮挡）时 requestAnimationFrame 停止、
+// 普通定时器被节流到 1 次/秒；视频推流期间改由 Worker 定时器驱动，只更新飞机并编码画面
+const ticker = new Worker(URL.createObjectURL(new Blob(
+  ['setInterval(() => postMessage(0), 40);'], { type: 'text/javascript' })));
+ticker.onmessage = () => {
+  if (document.hidden && latest && latest.drones.some((s) => s.stream)) step(true);
+};
+
+function step(hidden = false) {
   const dt = Math.min(clock.getDelta(), 0.1);
   const t = performance.now() / 1000;
   drones.forEach((d, i) => {
     animateDrone(d, dt, t);
     d.label.visible = camMode === 'orbit' || i !== selected;
   });
+  if (hidden) {
+    video.tick(latest.drones, drones);
+    return;
+  }
   const d = drones[selected];
 
   if (d && d.pos) {
@@ -827,13 +859,9 @@ function frame() {
 
   if (d && d.pos && settings.pip) {
     placeFpv(fpvCam, d);
-    d.root.visible = false;
-    const gizmo = editor.gizmo.visible;
-    editor.gizmo.visible = false;  // 机载摄像头画面里不显示编辑手柄
-    pipRenderer.render(scene, fpvCam);
-    editor.gizmo.visible = gizmo;
-    d.root.visible = true;
+    renderOnboard(d, () => pipRenderer.render(scene, fpvCam));
   }
+  if (latest) video.tick(latest.drones, drones);
   updatePanel(t);
 }
 

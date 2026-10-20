@@ -87,6 +87,7 @@ python tools/patch_mindplus1x.py "F:/hos/tool/MindPlus_Win_V1.8.1_RC3.0"
 小技巧：
 
 - 先点一下「电池电量」积木，能显示数值就说明 Mind+ 已连上模拟器；
+- 「开启 Tello 摄像头」积木会弹出「Tello视频」窗口，显示模拟器的机载摄像头画面（见[视频流](#视频流)）；
 - 用 ToF 避障的程序选「障碍物 / ToF 测试」或「圆柱森林」，用挑战卡的程序选「挑战卡」或「穿越门框赛道」；
 - 「速度」切到 2× / 4× 可以加快长程序；「重置」让飞机回到起飞点并恢复电量；
 - **Mind+ Python 模式**的程序只要是用 UDP 发 Tello 指令的（如 djitellopy、robomaster SDK），同样不用修改即可运行。
@@ -233,8 +234,7 @@ App 会记住上次的地址；空闲时每 10 秒发送一次 `rc 0 0 0 0` 保�
 更多飞机：下拉框选择 3 架 / 4 架，或 `python -m rmtt_sim --drones 4` 启动，手机端口依次为 8889 / 8989 / 9089 / 9189。
 `setup_network.ps1` 默认已为 4 架飞机准备好地址和防火墙规则，更多请运行 `tools\setup_network.ps1 -Drones N`。
 
-**Mind+ 组队模式**：组队扩展会在电脑所在局域网中扫描飞机，能否扫描到环回接口上的 `192.168.10.x`
-取决于 Mind+ 的扫描实现，目前未经验证；单机模式不受影响。
+**Mind+ 组队模式**：Mind+ 1.x 组队扩展扫描局域网时会跳过本机地址，而模拟器的 `192.168.10.x` 正是本机地址，因此**无法发现模拟器**；单机模式不受影响。
 
 ## 支持的指令
 
@@ -242,6 +242,14 @@ App 会记住上次的地址；空闲时每 10 秒发送一次 `rc 0 0 0 0` 保�
 `up/down/left/right/forward/back x` `cw/ccw x` `flip l/r/f/b` `go x y z speed [mid]`
 `curve x1 y1 z1 x2 y2 z2 speed [mid]` `jump x y z speed yaw mid1 mid2` `rc a b c d` `speed x`
 `mon` `moff` `mdirection x` `streamon` `streamoff` `wifi` `ap` `multiwifi` `port` `setfps` `setbitrate` `setresolution` `wifisetchannel`
+
+### 视频流
+
+`streamon` 后，模拟器把机载摄像头画面（960×720，H.264 Constrained Baseline，约 20 fps，每秒一个关键帧）按真机格式发到客户端的 UDP **11111** 端口：每帧按 1460 字节分片，最后一片不足 1460 字节表示一帧结束。Mind+「开启 Tello 摄像头」、djitellopy、`ffplay udp://0.0.0.0:11111` 等都可以直接接收。
+
+- 画面由 **3D 界面**渲染并用浏览器 WebCodecs 编码，推流期间**须保持 3D 界面打开**（最小化或被 Mind+ 遮挡也可以，后台时由 Worker 定时器驱动，约 15 fps）；
+- WebCodecs 只在安全上下文可用，请用 `http://127.0.0.1:8080` 打开（用局域网 IP 打开时无法推流，画中画标签会提示）；
+- 画面中不显示 ToF 光束、飞行轨迹、编号标签等界面辅助图形。
 
 **查询**：`battery?` `speed?` `time?` `wifi?` `sdk?` `sn?` `hardware?`（返回 `RMTT`）`wifiversion?` `ap?` `ssid?`
 以及旧版 `height?` `temp?` `attitude?` `baro?` `acceleration?` `tof?`
@@ -280,6 +288,7 @@ Mind+ 实时模式通过 **Tello SDK 3.0** 文本协议控制飞机：
 | Mind+ → 飞机 | `192.168.10.1:8889` UDP | `command`、`takeoff`、`EXT mled …` 等指令；Mind+ 1.x 的动作指令带防丢包序号 `Re[tag][id] takeoff`，同一 tag 连发 5 遍，只执行一次 |
 | 飞机 → Mind+ | 原路返回 | `ok` / `error …` / 查询结果；带序号的指令回复 `Re[tag][id] ok` |
 | 飞机 → Mind+ | 电脑 `:8890` UDP，10Hz | 状态字符串 `mid:..;h:..;bat:..;` |
+| 飞机 → Mind+ | 电脑 `:11111` UDP（`streamon` 后） | H.264 视频流，按 1460 字节分片 |
 
 `tools\setup_network.ps1` 在 Windows 环回接口上添加虚拟地址：`192.168.10.1`（飞机 #1）、`192.168.10.11~13`（飞机 #2~#4），
 以及 `192.168.10.2`（本机客户端的源地址），并添加防火墙入站规则（UDP 8889 / 8989 / 9089 / 9189）。
@@ -359,7 +368,7 @@ python -m rmtt_sim [--scene 场景id] [--drones N] [--auto-land 15]
 ## 局限
 
 - 只模拟 **实时模式**。上传模式（把 Arduino / MicroPython 程序烧录到 ESP32）需要模拟 ESP32 芯片本身，不在本项目范围内。
-- `streamon` 只切换状态，不输出 11111 端口的 H.264 视频流（界面中有机载摄像头画面可代替）。
+- 视频流依赖浏览器中打开的 3D 界面（WebCodecs 编码），关闭 3D 界面后 `streamon` 仍回复 `ok` 但不出画面；后台时帧率降到约 15 fps。
 - 飞行动力学为运动学近似（匀速移动 + 视觉倾角），不模拟风、漂移与定位误差。
 - 已用 Mind+ V1.8.1 实测连接与起飞 / 升降 / 前后飞行 / 降落积木，其余积木**尚未逐个验证**；
   若发现某个积木的回复格式不被 Mind+ 接受，请查看网页日志中的收发记录并调整 `rmtt_sim/drone.py`。
@@ -385,6 +394,7 @@ scenes/user/              你保存的场景
 web/                      Three.js 3D 前端（three r160 已内置于 web/vendor，离线可用）
   app.js                  主界面、飞机模型、渲染循环
   editor.js               场景编辑器
+  video.js                机载摄像头视频流（WebCodecs H.264 编码，经模拟器转发到 UDP 11111）
   world3d.js              场景对象 → 3D 模型
 android/                  Android 遥控 App（Kotlin + Compose）
 tools/setup_network.ps1   添加 / 移除虚拟 IP 与防火墙规则
@@ -428,6 +438,7 @@ keyPassword=******
 
 ## 更新记录
 
+- **机载摄像头视频流**：`streamon` 后输出真机格式的 H.264 视频流到客户端 UDP 11111，Mind+「开启 Tello 摄像头」可显示模拟器画面；3D 界面最小化或被遮挡时继续推流；机载画面（画中画 / 视频流）不再显示 ToF 光束等辅助图形。
 - **Mind+ 1.x 实测打通**：支持 Mind+ 实时模式的 `Re[tag][id] 指令` 防丢包序号（同一 tag 连发 5 遍只执行一次，
   回复 `Re[tag][id] ok`）；新增 `tools/patch_mindplus1x.py`，让 Mind+ 1.x 无需真实 WiFi 即可连接本机模拟器；
   文档改正连接步骤，说明 Mind+ 2.0 实时模式 TT 扩展不可用。
