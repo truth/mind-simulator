@@ -1,0 +1,63 @@
+<!doctype html>
+<!-- 用 Mind+ 内置 wfs.js 回放 cap.bin（tools/video_check.py --packets 抓取），拆包逻辑与 Mind+ TelloVideoServer 相同 -->
+<meta charset="utf-8">
+<title>Mind+ wfs.js 视频回放测试</title>
+<body style="font:14px monospace">
+<video id="v" width="480" height="360" style="background:#000" muted></video>
+<canvas id="c" width="480" height="360" style="background:#333"></canvas>
+<pre id="log"></pre>
+<script src="wfs_mod.js"></script>
+<script>
+const logEl = document.getElementById('log');
+const log = (...a) => { logEl.textContent += a.join(' ') + '\n'; };
+window.onerror = (m) => log('window.onerror', m);
+const origLog = console.log;
+console.log = (...a) => { origLog(...a); log('console:', ...a.map(String)); };
+
+// 模拟 webpack 运行时：模块 2 为 interopRequireDefault，模块 27 为 typeof 辅助函数
+const mod = { exports: {} };
+const req = (n) => n === 27 ? ((x) => typeof x) : ((o) => (o && o.__esModule ? o : { default: o }));
+window.__wfsFactory(mod, mod.exports, req);
+const Wfs = mod.exports.default || mod.exports;
+
+const video = document.getElementById('v');
+video.addEventListener('error', () => log('video error', video.error && video.error.code, video.error && video.error.message));
+['playing', 'loadeddata', 'waiting'].forEach((e) => video.addEventListener(e, () => log('video', e, video.videoWidth + 'x' + video.videoHeight)));
+const wfs = new Wfs();
+wfs.attachMedia(video, 'ch1');
+// Mind+ 每 33ms 把 <video> 画到弹窗的 canvas 上
+const ctx = document.getElementById('c').getContext('2d');
+setInterval(() => ctx.drawImage(video, 0, 0, 480, 360), 33);
+
+fetch('cap.bin').then((r) => r.arrayBuffer()).then((ab) => {
+  const dv = new DataView(ab);
+  const pk = [];
+  for (let o = 0; o < ab.byteLength;) {
+    const n = dv.getUint32(o, true);
+    pk.push(new Uint8Array(ab, o + 4, n));
+    o += 4 + n;
+  }
+  log('分片', pk.length);
+  // 与 Mind+ 相同：累积分片，遇到长度不是 1460 的分片时整体 feed；每 50ms 喂一帧
+  let buf = [], i = 0, feeds = 0;
+  const step = () => {
+    while (i < pk.length) {
+      const m = pk[i++];
+      buf.push(m);
+      if (m.length !== 1460) {
+        const all = new Uint8Array(buf.reduce((s, x) => s + x.length, 0));
+        let o = 0;
+        for (const x of buf) { all.set(x, o); o += x.length; }
+        buf = [];
+        feeds++;
+        try { wfs.feed(all); } catch (e) { log('feed error', e.message); }
+        break;
+      }
+    }
+    if (i < pk.length) setTimeout(step, 50);
+    else log('完成 feed', feeds, '次；readyState', video.readyState, 'buffered',
+      video.buffered.length ? video.buffered.end(0).toFixed(2) + 's' : '-');
+  };
+  step();
+}).catch((e) => log('读取 cap.bin 失败（先运行 tools/video_check.py --packets）:', e.message));
+</script>

@@ -84,6 +84,8 @@ python tools/patch_mindplus1x.py "F:/hos/tool/MindPlus_Win_V1.8.1_RC3.0"
 
 模拟器重启后 Mind+ 会断开（图标变回 **!**），重新点图标连接即可。
 
+补丁原理、移植到其他 Mind+ 版本、协议细节与问题排查见 **[docs/mindplus-integration.md](docs/mindplus-integration.md)**。
+
 小技巧：
 
 - 先点一下「电池电量」积木，能显示数值就说明 Mind+ 已连上模拟器；
@@ -352,6 +354,7 @@ python -m rmtt_sim [--scene 场景id] [--drones N] [--auto-land 15]
 - **Mind+ 连接列表里没有 RMTT-SIM**：确认用的是 Mind+ 1.x 且已运行 `tools/patch_mindplus1x.py`（运行前须关闭 Mind+）；
   入口是积木区 TT 标题旁的 **!** 图标，不是顶部「连接设备」菜单。
 - **积木点了没反应 / 日志显示 `unknown command: re1001`**：模拟器版本过旧，不认识 Mind+ 1.x 的 `Re` 序号前缀，请更新。
+- **Mind+「Tello视频」弹窗没有画面**：确认 3D 界面用 `http://127.0.0.1:8080` 打开且画中画标签显示「推流中」；若曾在没有视频时开过摄像头，Mind+ 自身的 bug 会让 11111 端口一直被占用，需**完全退出 Mind+ 再启动**，连接后只点一次「开启 Tello 摄像头」。详见 [docs/mindplus-integration.md](docs/mindplus-integration.md)。
 - **App 搜索不到模拟器**：确认模拟器窗口显示「自动发现 UDP 8899 已开启」；手机与电脑在同一个 WiFi；
   路由器的「访客网络」「AP 隔离」会阻止广播和设备互访；仍不行可以手动输入网页「连接 → 手机 App」显示的地址。
 - **换了一台电脑，App 连不上了**：每台电脑的局域网 IP 不同，回到连接页点「🔍 重新搜索」即可找到新电脑。
@@ -399,16 +402,19 @@ web/                      Three.js 3D 前端（three r160 已内置于 web/vendo
 android/                  Android 遥控 App（Kotlin + Compose）
 tools/setup_network.ps1   添加 / 移除虚拟 IP 与防火墙规则
 tools/patch_mindplus1x.py 给 Mind+ 1.x 打补丁，无需 WiFi 连接本机模拟器
+tools/video_check.py      视频流自检：模拟客户端收 UDP 11111，用 ffmpeg 检查解码与截图
+tools/mindplus_wfs_test/  提取 Mind+ 内置 wfs.js，在浏览器中复现 Mind+ 的视频解码
 examples/                 模拟 Mind+ 发包的示例程序
 tests/                    Python 单元测试
-docs/                     文档截图
+docs/                     文档与截图（mindplus-integration.md：Mind+ 对接、补丁与问题排查）
 dist/                     编译好的 APK（不纳入 git）
 ```
 
 ### 测试
 
 ```bash
-python -m unittest discover tests                 # 模拟器：指令、飞行、碰撞、ToF、挑战卡、场景、单双切换、自动发现
+python -m unittest discover tests                 # 模拟器：指令、飞行、碰撞、ToF、挑战卡、场景、单双切换、自动发现、视频分片
+python tools/video_check.py --png frame.png       # 视频流端到端自检（需模拟器与 3D 界面已打开）
 
 cd android
 set TT_SIM_HOST=192.168.0.107                      # 模拟器地址（模拟器需在运行；建议用单独的测试实例，避免干扰正在使用的飞机）
@@ -438,6 +444,7 @@ keyPassword=******
 
 ## 更新记录
 
+- **Mind+ 对接文档与调试工具**：新增 [docs/mindplus-integration.md](docs/mindplus-integration.md)（版本选择、连接机制、补丁原理与移植、`Re` 序号、视频链路、问题排查、扩展指南、代码位置速查）；新增 `tools/video_check.py`、`tools/mindplus_wfs_test/`。
 - **机载摄像头视频流**：`streamon` 后输出真机格式的 H.264 视频流到客户端 UDP 11111，Mind+「开启 Tello 摄像头」可显示模拟器画面；3D 界面最小化或被遮挡时继续推流；机载画面（画中画 / 视频流）不再显示 ToF 光束等辅助图形。
 - **Mind+ 1.x 实测打通**：支持 Mind+ 实时模式的 `Re[tag][id] 指令` 防丢包序号（同一 tag 连发 5 遍只执行一次，
   回复 `Re[tag][id] ok`）；新增 `tools/patch_mindplus1x.py`，让 Mind+ 1.x 无需真实 WiFi 即可连接本机模拟器；
