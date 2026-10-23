@@ -87,6 +87,14 @@ class DroneTest(unittest.TestCase):
         h.send("cw 180")
         self.assertEqual(h.send("EXT tof?"), "tof 8192")
 
+    def test_fly_through_gate(self):
+        h = Harness()
+        h.world.add_obstacle({"type": "gate", "x": 150, "y": 0, "w": 100, "h": 150, "t": 8})
+        h.send("takeoff")
+        self.assertEqual(h.send("forward 300"), "ok")
+        self.assertAlmostEqual(h.d.pos[0], 300, delta=1)
+        self.assertAlmostEqual(h.d.pos[2], 80, delta=1)  # 从门洞中间穿过，没有被抬到横梁上方
+
     def test_mission_pad(self):
         h = Harness("pads")
         h.send("takeoff")

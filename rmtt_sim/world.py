@@ -266,10 +266,14 @@ class World:
                 best = t
         return best
 
-    def floor_height(self, x, y):
-        """(x, y) 正下方最高的支撑面高度（地面或障碍物顶面）。"""
+    def floor_height(self, x, y, z=None):
+        """(x, y) 正下方最高的支撑面高度（地面或障碍物顶面）。
+
+        给定 z（机身底部高度）时只计入不高于 z 的顶面，悬在头顶的结构（如门框横梁）不算支撑面。"""
         h = 0.0
         for prim in self._prims:
+            if z is not None and prim.z1 > z + 1.0:
+                continue
             if prim.covers(x, y, DRONE_RADIUS * 0.5):
                 h = max(h, prim.z1)
         return h

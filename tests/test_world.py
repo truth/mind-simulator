@@ -43,6 +43,9 @@ class GeometryTest(unittest.TestCase):
         self.assertIsNotNone(w.raycast((0, 0, 155), (1, 0, 0), 500))  # 打在横梁上
         self.assertIsNone(w.collides((150, 0, 80)))
         self.assertIsNotNone(w.collides((150, 50, 80)))
+        # 门洞下方的支撑面是地面，横梁顶面只对横梁上方的飞机算数
+        self.assertEqual(w.floor_height(150, 0, 80), 0)
+        self.assertEqual(w.floor_height(150, 0, 200), 158)
 
     def test_drone_lands_on_table_and_flies_through_gate(self):
         w = world({"type": "box", "x": 100, "y": 0, "w": 80, "d": 80, "h": 75},

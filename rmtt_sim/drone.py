@@ -212,7 +212,7 @@ class Drone:
         return (f[0] * x + l[0] * y, f[1] * x + l[1] * y, z)
 
     def floor(self):
-        return self.world.floor_height(self.pos[0], self.pos[1])
+        return self.world.floor_height(self.pos[0], self.pos[1], self.pos[2])
 
     def try_move(self, p):
         """移动到 p，撞到障碍物或其他飞机则不移动并返回 False（由 update 判定为碰撞）。"""
@@ -226,7 +226,7 @@ class Drone:
                 other.collision_t = time.time()
                 other.log("warn", "被 #%d 撞到" % (self.index + 1))
                 return False
-        floor = self.world.floor_height(p[0], p[1])
+        floor = self.world.floor_height(p[0], p[1], p[2])
         if p[2] < floor + MIN_FLY_HEIGHT and self.flying and not self._landing:
             p = (p[0], p[1], max(p[2], floor + MIN_FLY_HEIGHT))
         self.pos = p
@@ -506,7 +506,7 @@ class Drone:
         delta = self.body_to_world(dx, dy, dz)
         target = _vadd(start, delta)
         target = (target[0], target[1],
-                  max(target[2], self.world.floor_height(target[0], target[1]) + MIN_FLY_HEIGHT))
+                  max(target[2], self.world.floor_height(target[0], target[1], target[2]) + MIN_FLY_HEIGHT))
         self._start_task(cmd, [MoveSeg(target, self.speed)], reply)
 
     def _dist(self, a):
