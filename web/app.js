@@ -431,8 +431,9 @@ function animateDrone(d, dt, t) {
   const target = toV3(s.pos);
   const k = 1 - Math.pow(0.0001, dt);  // 平滑插值
   d.pos.lerp(target, Math.min(1, k * 1.5));
-  let dy = ((s.yaw - d.yaw + 540) % 360) - 180;
+  let dy = (((s.yaw - d.yaw) % 360 + 540) % 360) - 180;
   d.yaw += dy * Math.min(1, k * 1.5);
+  d.yaw = (((d.yaw + 180) % 360 + 360) % 360) - 180;
   d.tilt[0] += (s.tilt[0] - d.tilt[0]) * k;
   d.tilt[1] += (s.tilt[1] - d.tilt[1]) * k;
 
