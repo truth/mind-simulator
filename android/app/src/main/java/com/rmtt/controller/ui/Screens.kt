@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -450,6 +451,102 @@ private fun CmdButton(text: String, modifier: Modifier = Modifier, onClick: () -
 
 @Composable
 private fun ExtTab(vm: DroneViewModel) {
+    var page by rememberSaveable { mutableIntStateOf(0) }
+    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Segmented(listOf("点阵 / 灯光", "外接传感器"), page) { page = it }
+        Box(Modifier.weight(1f)) {
+            if (page == 0) MatrixLedPage(vm) else SensorPage(vm)
+        }
+    }
+}
+
+// ============================================================ 外接传感器页（EXT 自定义指令）
+
+@Composable
+private fun SensorPage(vm: DroneViewModel) {
+    Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Card("测量") {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { vm.readSensors() }) { Text("读取") }
+                    Text("自动刷新", fontSize = 12.sp, color = Muted)
+                    Switch(vm.autoSensors, { vm.autoSensors = it })
+                }
+                SensorRow("超声波", vm.ultrasonic?.let { if (it >= 999) "超出量程" else "$it cm" })
+                SensorRow("光线", vm.light?.let { "$it lux" })
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("下方颜色", Modifier.width(72.dp), fontSize = 13.sp, color = Muted)
+                    vm.groundColor?.let { (rgb, name) ->
+                        Box(Modifier.size(16.dp).clip(RoundedCornerShape(3.dp)).background(Color(0xFF000000 or rgb.toLong())))
+                        Spacer(Modifier.width(6.dp))
+                        Text(if (name == "none") "离地太高" else name, fontSize = 15.sp, fontFamily = FontFamily.Monospace)
+                    } ?: Text("-", fontSize = 15.sp)
+                }
+            }
+            Card("手势 / 红外遥控（事件，每次读取一个）") {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = { vm.readGesture() }) { Text("读手势") }
+                    Text(vm.gesture ?: "-", fontSize = 15.sp, fontFamily = FontFamily.Monospace)
+                    Spacer(Modifier.width(12.dp))
+                    OutlinedButton(onClick = { vm.readIr() }) { Text("读红外") }
+                    Text(vm.irCode ?: "-", fontSize = 15.sp, fontFamily = FontFamily.Monospace)
+                }
+                Text("在电脑模拟器网页的「外接模组」卡片中点手势 / 遥控器按键产生事件。", fontSize = 11.sp, color = Muted)
+            }
+            Card("舵机") {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("${vm.servoAngle.roundToInt()}°", Modifier.width(44.dp), fontFamily = FontFamily.Monospace)
+                    Slider(vm.servoAngle, { vm.servoAngle = it }, Modifier.weight(1f), valueRange = 0f..180f,
+                        onValueChangeFinished = { vm.sendServo() })
+                }
+            }
+        }
+        Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Card("HuskyLens 二哈识图") {
+                val modes = listOf("color" to "颜色", "tag" to "标签", "face" to "人脸")
+                Segmented(modes.map { it.second }, modes.indexOfFirst { it.first == vm.huskyMode }) { vm.setHusky(modes[it].first) }
+                HuskyView(vm.husky)
+                Text(
+                    if (vm.husky.isEmpty()) "未识别到目标（点「读取」或开启自动刷新）"
+                    else vm.husky.joinToString("  ") { "ID${it.id}(${it.x},${it.y})" },
+                    fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = Muted,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SensorRow(label: String, value: String?) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(label, Modifier.width(72.dp), fontSize = 13.sp, color = Muted)
+        Text(value ?: "-", fontSize = 15.sp, fontFamily = FontFamily.Monospace)
+    }
+}
+
+/** HuskyLens 画面（320×240）缩略图：画出识别框与 ID */
+@Composable
+private fun HuskyView(boxes: List<DroneViewModel.HuskyBox>) {
+    androidx.compose.foundation.Canvas(
+        Modifier.fillMaxWidth().aspectRatio(4f / 3f).clip(RoundedCornerShape(6.dp)).background(Color(0xFF0A0D10))
+    ) {
+        val sx = size.width / 320f
+        val sy = size.height / 240f
+        drawLine(Border, androidx.compose.ui.geometry.Offset(size.width / 2, 0f), androidx.compose.ui.geometry.Offset(size.width / 2, size.height))
+        drawLine(Border, androidx.compose.ui.geometry.Offset(0f, size.height / 2), androidx.compose.ui.geometry.Offset(size.width, size.height / 2))
+        for (b in boxes) {
+            drawRect(
+                Color(0xFFF3A712),
+                topLeft = androidx.compose.ui.geometry.Offset((b.x - b.w / 2f) * sx, (b.y - b.h / 2f) * sy),
+                size = androidx.compose.ui.geometry.Size(b.w * sx, b.h * sy),
+                style = androidx.compose.ui.graphics.drawscope.Stroke(width = 3f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun MatrixLedPage(vm: DroneViewModel) {
     Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
         // 点阵编辑器
         Column(Modifier.fillMaxHeight().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {

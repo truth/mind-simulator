@@ -153,3 +153,16 @@ button:disabled { opacity: .45; cursor: default; }
 .set-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; }
 .sw { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; box-shadow: 0 0 0 1px rgba(255, 255, 255, .7); }
 #hud span { font-weight: 700; }
+
+/* ---- 外接模组面板 ---- */
+#extCard .grid b { display: inline-flex; align-items: center; gap: 4px; }
+.ext-sub { display: flex; align-items: center; gap: 8px; margin: 10px 0 4px; color: #7d8b9c; }
+.ext-sub select { padding: 1px 4px; font-size: 12px; }
+.ext-sub input[type=range] { flex: 1; }
+.ext-sub .event { color: #4cc38a; font-family: Consolas, monospace; }
+#huskyCanvas { width: 100%; aspect-ratio: 4 / 3; background: #0a0d10; border-radius: 6px; border: 1px solid #253040; }
+.pad-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.pad-grid.ir { grid-template-columns: repeat(3, 1fr); }
+.pad-grid button { padding: 3px 0; font-size: 12px; }
+.chk-prop { flex-direction: row !important; align-items: center; gap: 4px !important; grid-column: span 2; }
+.palette { grid-template-columns: repeat(5, 1fr); }

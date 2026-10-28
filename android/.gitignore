@@ -6,3 +6,4 @@ local.properties
 .idea/
 keystore/
 keystore.properties
+.kotlin/

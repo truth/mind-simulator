@@ -1,7 +1,7 @@
 // 场景编辑器 + 场景库面板
 import * as THREE from 'three';
 import { TransformControls } from './vendor/TransformControls.js';
-import { DEG, PRESETS, TYPE_NAMES, obstacleMesh, padMesh, readPlacement } from './world3d.js';
+import { DEG, PRESETS, TARGET_NAMES, TYPE_NAMES, obstacleMesh, padMesh, readPlacement, targetMesh, zoneMesh } from './world3d.js';
 
 const $ = (id) => document.getElementById(id);
 const PALETTE = ['#e4572e', '#29335c', '#f3a712', '#669bbc', '#8a817c', '#2a9d8f'];
@@ -16,13 +16,19 @@ const FIELDS = {
   gate: [['x', 'X 前后', -100000, 100000, 1], ['y', 'Y 左右', -100000, 100000, 1], ['z', '离地高度', 0, 10000, 1],
     ['w', '门洞宽', 20, 2000, 1], ['h', '门洞高', 20, 2000, 1], ['t', '框粗', 2, 100, 1], ['yaw', '旋转°', -180, 180, 1]],
   pad: [['x', 'X 前后', -100000, 100000, 1], ['y', 'Y 左右', -100000, 100000, 1], ['z', '所在高度', 0, 10000, 1]],
+  padv: [['x', 'X 前后', -100000, 100000, 1], ['y', 'Y 左右', -100000, 100000, 1], ['z', '中心高度', 0, 10000, 1],
+    ['yaw', '卡面朝向°', -180, 180, 1]],
+  target: [['x', 'X 前后', -100000, 100000, 1], ['y', 'Y 左右', -100000, 100000, 1], ['z', '中心高度', 0, 10000, 1],
+    ['id', '编号 ID', 1, 99, 1], ['size', '边长', 5, 200, 1], ['yaw', '卡面朝向°', -180, 180, 1]],
+  zone: [['x', 'X 前后', -100000, 100000, 1], ['y', 'Y 左右', -100000, 100000, 1],
+    ['w', '长（自身 X）', 5, 5000, 1], ['d', '宽（自身 Y）', 5, 5000, 1], ['yaw', '旋转°', -180, 180, 1]],
   start: [['x', 'X 前后', -100000, 100000, 1], ['y', 'Y 左右', -100000, 100000, 1], ['yaw', '机头朝向°', -180, 180, 1]],
 };
 
 export function createEditor(ctx) {
   const { camera, canvas, controls, ground, worldGroup } = ctx;
   const ed = { active: false };
-  let selection = null;          // { kind: 'obstacle' | 'pad' | 'start', index }
+  let selection = null;          // { kind: 'obstacle' | 'pad' | 'target' | 'zone' | 'start', index }
   let placing = null;            // PRESETS 键
   let ghost = null;
   let dragging = false;
@@ -47,7 +53,7 @@ export function createEditor(ctx) {
     const item = selectedItem();
     const p = readPlacement(obj);
     item.x = p.x; item.y = p.y;
-    if (selection.kind !== 'pad' && !(selection.kind === 'obstacle' && item.type === 'cylinder')) item.yaw = p.yaw;
+    if (canRotateItem(selection.kind, item)) item.yaw = p.yaw;
     syncForm();
     markDirty();
     push(false);
@@ -63,8 +69,7 @@ export function createEditor(ctx) {
   $('snap').onchange = applySnap;
 
   function setMode(mode) {
-    const canRotate = selection && selection.kind !== 'pad'
-      && !(selection.kind === 'obstacle' && selectedItem().type === 'cylinder');
+    const canRotate = selection && canRotateItem(selection.kind, selectedItem());
     if (mode === 'rotate' && !canRotate) mode = 'translate';
     transform.setMode(mode);
     transform.showX = mode === 'translate';
@@ -78,14 +83,41 @@ export function createEditor(ctx) {
   const world = () => ctx.getWorld();
   const content = () => {
     const w = world();
-    return { title: w.title, description: w.description || '', start: w.start, obstacles: w.obstacles, pads: w.pads };
+    return {
+      title: w.title, description: w.description || '', start: w.start, obstacles: w.obstacles, pads: w.pads,
+      targets: w.targets || [], zones: w.zones || [], ambient: w.ambient,
+    };
   };
 
   function selectedItem() {
     const w = world();
     if (!selection) return null;
     if (selection.kind === 'start') return w.start;
-    return selection.kind === 'pad' ? w.pads[selection.index] : w.obstacles[selection.index];
+    return listOf(selection.kind)[selection.index];
+  }
+
+  /** 某类对象所在的列表 */
+  function listOf(kind) {
+    const w = world();
+    if (kind === 'pad') return w.pads;
+    if (kind === 'target') return (w.targets = w.targets || []);
+    if (kind === 'zone') return (w.zones = w.zones || []);
+    return w.obstacles;
+  }
+
+  /** 是否允许旋转：圆柱、平放的挑战卡没有朝向 */
+  function canRotateItem(kind, item) {
+    if (!item || kind === 'start') return kind === 'start';
+    if (kind === 'pad') return !!item.vertical;
+    if (kind === 'obstacle') return item.type !== 'cylinder';
+    return true;
+  }
+
+  function meshFor(group, item) {
+    if (group === 'pad') return padMesh(item);
+    if (group === 'target') return targetMesh(item);
+    if (group === 'zone') return zoneMesh(item);
+    return obstacleMesh(item);
   }
 
   function snapshot() {
@@ -187,12 +219,20 @@ export function createEditor(ctx) {
   // ---------------------------------------------------------------- 放置
   function newItem(key, x, y) {
     const w = world();
-    if (key === 'pad') {
+    const { label, group, ...preset } = PRESETS[key];
+    if (group === 'pad') {
       const used = new Set(w.pads.map((p) => p.id));
       const id = [1, 2, 3, 4, 5, 6, 7, 8].find((n) => !used.has(n)) || 1;
       return { id, x, y, z: 0 };
     }
-    const { label, ...preset } = PRESETS[key];
+    if (group === 'target') {
+      // 同类目标自动编号
+      const used = new Set(listOf('target').filter((t) => t.kind === preset.kind).map((t) => t.id));
+      let id = 1;
+      while (used.has(id)) id++;
+      return { ...preset, id, x, y };
+    }
+    if (group === 'zone') return { ...preset, x, y };
     return { color: PALETTE[w.obstacles.length % PALETTE.length], ...preset, x, y };
   }
 
@@ -200,9 +240,12 @@ export function createEditor(ctx) {
     cancelPlacing();
     placing = key;
     const item = newItem(key, 0, 0);
-    ghost = key === 'pad' ? padMesh(item) : obstacleMesh(item);
+    ghost = meshFor(PRESETS[key].group, item);
     ghost.traverse((o) => {
-      if (o.material) { o.material = o.material.clone(); o.material.transparent = true; o.material.opacity = 0.45; }
+      if (o.material) {
+        const ghostMat = (m) => { const c = m.clone(); c.transparent = true; c.opacity = 0.45; return c; };
+        o.material = Array.isArray(o.material) ? o.material.map(ghostMat) : ghostMat(o.material);
+      }
       o.castShadow = false;
     });
     ghost.visible = false;
@@ -224,11 +267,11 @@ export function createEditor(ctx) {
     const p = groundPoint(ev);
     if (!p) return;
     snapshot();
-    const w = world();
     const item = newItem(placing, p.x, p.y);
-    let sel;
-    if (placing === 'pad') { w.pads.push(item); sel = { kind: 'pad', index: w.pads.length - 1 }; }
-    else { w.obstacles.push(item); sel = { kind: 'obstacle', index: w.obstacles.length - 1 }; }
+    const group = PRESETS[placing].group;
+    const list = listOf(group);
+    list.push(item);
+    const sel = { kind: group, index: list.length - 1 };
     if (!ev.shiftKey) cancelPlacing();
     changed();
     select(sel);
@@ -263,8 +306,7 @@ export function createEditor(ctx) {
   function removeSelected() {
     if (!selection || selection.kind === 'start') return;
     snapshot();
-    const w = world();
-    (selection.kind === 'pad' ? w.pads : w.obstacles).splice(selection.index, 1);
+    listOf(selection.kind).splice(selection.index, 1);
     select(null);
     changed();
   }
@@ -272,8 +314,7 @@ export function createEditor(ctx) {
   function duplicateSelected() {
     if (!selection || selection.kind === 'start') return;
     snapshot();
-    const w = world();
-    const list = selection.kind === 'pad' ? w.pads : w.obstacles;
+    const list = listOf(selection.kind);
     const copy = { ...list[selection.index] };
     copy.x += 30; copy.y -= 30;
     list.push(copy);
@@ -304,18 +345,29 @@ export function createEditor(ctx) {
     $('propActions').hidden = !item || selection.kind === 'start';
     $('modeBtns').hidden = !item;
     if (!item) { box.innerHTML = '<div class="muted">在 3D 视图中单击对象，或从下方列表选择</div>'; return; }
-    const kind = selection.kind === 'obstacle' ? item.type : selection.kind;
-    const title = selection.kind === 'start' ? '起飞点' : selection.kind === 'pad' ? '挑战卡' : TYPE_NAMES[item.type];
+    const sk = selection.kind;
+    const kind = sk === 'obstacle' ? item.type : sk === 'pad' && item.vertical ? 'padv' : sk;
+    const title = {
+      start: '起飞点', pad: '挑战卡', zone: '地面色块（颜色传感器）',
+      target: `识别目标 · ${TARGET_NAMES[item.kind] || ''}（HuskyLens）`,
+    }[sk] || TYPE_NAMES[item.type];
     let html = `<div class="prop-title">${title}</div><div class="prop-grid">`;
-    if (selection.kind === 'pad') {
+    if (sk === 'pad') {
       html += '<label>编号<select data-key="id">' +
         [1, 2, 3, 4, 5, 6, 7, 8].map((n) => `<option value="${n}"${n === item.id ? ' selected' : ''}>m${n}</option>`).join('') +
         '</select></label>';
+      html += `<label class="chk-prop"><input type="checkbox" data-key="vertical"> 竖直贴墙（前视识别）</label>`;
+    }
+    if (sk === 'target') {
+      html += '<label>类型<select data-key="kind">' + Object.entries(TARGET_NAMES)
+        .map(([k, v]) => `<option value="${k}"${k === item.kind ? ' selected' : ''}>${v}</option>`).join('') + '</select></label>';
     }
     for (const [key, label, min, max, step] of FIELDS[kind]) {
       html += `<label>${label}<input type="number" data-key="${key}" min="${min}" max="${max}" step="${step}"></label>`;
     }
-    if (selection.kind === 'obstacle') html += `<label>颜色<input type="color" data-key="color"></label>`;
+    if (sk === 'obstacle' || sk === 'zone' || (sk === 'target' && item.kind !== 'tag')) {
+      html += `<label>颜色<input type="color" data-key="color"></label>`;
+    }
     html += '</div><div class="muted unit">单位：cm</div>';
     box.innerHTML = html;
     box.querySelectorAll('[data-key]').forEach((input) => {
@@ -325,7 +377,19 @@ export function createEditor(ctx) {
         snapshot();
         const key = input.dataset.key;
         if (key === 'color') it.color = input.value;
-        else {
+        else if (key === 'kind') {
+          it.kind = input.value;
+          changed();
+          renderForm();   // 标题与颜色字段随类型变化
+          return;
+        } else if (key === 'vertical') {
+          it.vertical = input.checked;
+          if (it.vertical) { it.z = Math.max(it.z || 0, 80); it.yaw = it.yaw ?? 180; }
+          else { it.z = 0; delete it.yaw; }
+          changed();
+          renderForm();   // 竖直 / 平放的字段不同
+          return;
+        } else {
           let v = Number(input.value);
           if (!Number.isFinite(v)) v = 0;
           v = Math.min(Number(input.max ?? v) || v, Math.max(Number(input.min ?? v) || 0, v));
@@ -344,7 +408,8 @@ export function createEditor(ctx) {
     $('props').querySelectorAll('[data-key]').forEach((input) => {
       if (document.activeElement === input) return;
       const v = item[input.dataset.key];
-      input.value = input.dataset.key === 'color' ? (v || '#8a817c') : (v ?? 0);
+      if (input.type === 'checkbox') input.checked = !!v;
+      else input.value = input.dataset.key === 'color' ? (v || '#8a817c') : (v ?? 0);
     });
   }
 
@@ -358,7 +423,15 @@ export function createEditor(ctx) {
       text: `${TYPE_NAMES[o.type]} #${i + 1}  (${Math.round(o.x)}, ${Math.round(o.y)})`,
     }));
     w.pads.forEach((p, i) => rows.push({
-      kind: 'pad', index: i, color: '#e9e9e4', text: `挑战卡 m${p.id}  (${Math.round(p.x)}, ${Math.round(p.y)})`,
+      kind: 'pad', index: i, color: '#e9e9e4',
+      text: `挑战卡 m${p.id}${p.vertical ? '（竖直）' : ''}  (${Math.round(p.x)}, ${Math.round(p.y)})`,
+    }));
+    (w.targets || []).forEach((t, i) => rows.push({
+      kind: 'target', index: i, color: t.kind === 'tag' ? '#ffffff' : t.color,
+      text: `${TARGET_NAMES[t.kind]} ID${t.id}  (${Math.round(t.x)}, ${Math.round(t.y)})`,
+    }));
+    (w.zones || []).forEach((z, i) => rows.push({
+      kind: 'zone', index: i, color: z.color, text: `地面色块  (${Math.round(z.x)}, ${Math.round(z.y)})`,
     }));
     const el = $('objList');
     el.innerHTML = '';
@@ -370,7 +443,8 @@ export function createEditor(ctx) {
       div.onclick = () => select({ kind: r.kind, index: r.index });
       el.appendChild(div);
     }
-    $('objCount').textContent = `${w.obstacles.length} 个障碍物 · ${w.pads.length} 张挑战卡`;
+    $('objCount').textContent = `${w.obstacles.length} 障碍物 · ${w.pads.length} 挑战卡 · `
+      + `${(w.targets || []).length} 识别目标 · ${(w.zones || []).length} 色块`;
   }
 
   // ---------------------------------------------------------------- 场景库
@@ -502,7 +576,7 @@ export function createEditor(ctx) {
     if (document.activeElement !== $('sceneTitle')) $('sceneTitle').value = w.title;
     renderDirty();
     if (selection) {
-      const list = selection.kind === 'pad' ? w.pads : selection.kind === 'obstacle' ? w.obstacles : [w.start];
+      const list = selection.kind === 'start' ? [w.start] : listOf(selection.kind);
       if (!list[selection.index]) selection = null;
     }
     if (ed.active) reattach();

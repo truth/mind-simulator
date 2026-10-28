@@ -12,7 +12,7 @@ const MODEL_SCALE = 2;
 
 // ------------------------------------------------------------------ 设置（保存在浏览器 localStorage）
 const DEFAULT_COLORS = ['#2f6fde', '#e4572e', '#2a9d8f', '#f3a712'];  // #1 蓝 #2 橙 #3 绿 #4 黄
-const settings = { trail: true, tofBeam: true, pip: true, hud: true, colors: [...DEFAULT_COLORS] };
+const settings = { trail: true, tofBeam: true, pip: true, hud: true, ultraBeam: false, colors: [...DEFAULT_COLORS] };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('ttsim.settings') || '{}')); } catch { /* 忽略损坏的设置 */ }
 const saveSettings = () => localStorage.setItem('ttsim.settings', JSON.stringify(settings));
 const droneColor = (i) => settings.colors[i] || DEFAULT_COLORS[i % DEFAULT_COLORS.length];
@@ -177,7 +177,26 @@ function makeDrone(index) {
   ledLight.position.copy(led.position);
   ext.add(ledLight);
 
+  const servoPivot = new THREE.Group();
+  servoPivot.position.set(0.026, -0.022, 0);
+  const servoBody = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.008, 0.012), dark);
+  servoBody.position.set(0.026, -0.018, 0);
+  body.add(servoBody);
+  const servoArm = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.003, 0.004),
+    new THREE.MeshStandardMaterial({ color: 0xf3a712, roughness: 0.5 }));
+  servoArm.position.x = 0.016;
+  servoPivot.add(servoArm);
+  body.add(servoPivot);
+
   body.scale.setScalar(MODEL_SCALE);
+
+  // 超声波波束（设置中开启）：锥形半透明区域，长度为当前读数
+  const ultraCone = new THREE.Mesh(new THREE.ConeGeometry(Math.tan(THREE.MathUtils.degToRad(12)), 1, 24, 1, true),
+    new THREE.MeshBasicMaterial({ color: 0x4cc38a, transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide }));
+  ultraCone.geometry.translate(0, -0.5, 0);
+  ultraCone.geometry.rotateZ(Math.PI / 2);   // 锥尖在原点、沿 +X 张开
+  ultraCone.visible = false;
+  root.add(ultraCone);
 
   // 标签
   const label = makeLabel('#' + (index + 1), color);
@@ -206,7 +225,7 @@ function makeDrone(index) {
 
   scene.add(root);
   return {
-    color, label, root, body, props, pixels, led, ledMat, ledLight, statusLed, hull, shell, blob, beam, trail,
+    servoPivot, ultraCone, color, label, root, body, props, pixels, led, ledMat, ledLight, statusLed, hull, shell, blob, beam, trail,
     trailCount: 0, trailMax, lastTrail: null,
     pos: null, yaw: 0, tilt: [0, 0], spin: 0, state: null,
   };
@@ -469,6 +488,15 @@ function animateDrone(d, dt, t) {
   d.blob.material.opacity = Math.max(0.06, 0.3 - hgt * 0.06);
 
   // ToF 光束
+  // 舵机与超声波波束
+  d.servoPivot.rotation.z = -THREE.MathUtils.degToRad(s.ext ? s.ext.servo : 90);
+  d.ultraCone.visible = settings.ultraBeam && !!s.ext;
+  if (d.ultraCone.visible) {
+    const len = s.ext.ultrasonic >= 999 ? 4 : s.ext.ultrasonic / 100;
+    d.ultraCone.scale.set(len, len, len);
+    d.ultraCone.position.set(0.12, d.body.position.y + 0.06, 0);
+    d.ultraCone.rotation.set(0, 0, 0);
+  }
   d.beam.visible = settings.tofBeam;
   if (d.beam.visible) {
     const yawR = THREE.MathUtils.degToRad(d.yaw);
@@ -542,6 +570,7 @@ function updatePanel(t) {
     `高度 ${s.height}cm  航向 ${Math.round(s.yaw)}°\n` +
     `ToF ${s.tof_front >= 8192 ? '--' : s.tof_front + 'mm'}   ${s.task ? '▶ ' + s.task : ''}`;
   }
+  updateExtPanel(s);
   $('hud').hidden = !settings.hud;
   $('pip').hidden = !settings.pip;
   const vs = video.status(selected);
@@ -680,6 +709,65 @@ $('charge').onclick = () => {
   setTimeout(() => { $('charge').textContent = '所有飞机充满电'; }, 1500);
 };
 
+// ------------------------------------------------------------------ 外接模组面板
+const GESTURES = [['up', '↑ 上挥'], ['down', '↓ 下挥'], ['wave', '👋 挥手'], ['left', '← 左挥'], ['right', '→ 右挥'],
+  ['forward', '⇡ 前推'], ['clockwise', '↻ 顺时针'], ['anticlockwise', '↺ 逆时针'], ['backward', '⇣ 后拉']];
+// DFRobot 21 键红外遥控器
+const IR_KEYS = [['power', '电源'], ['vol+', 'VOL+'], ['func', 'FUNC'], ['prev', '⏮'], ['play', '⏯'], ['next', '⏭'],
+  ['down', '▼'], ['vol-', 'VOL-'], ['up', '▲'], ['0', '0'], ['eq', 'EQ'], ['rept', 'ST/REPT'],
+  ['1', '1'], ['2', '2'], ['3', '3'], ['4', '4'], ['5', '5'], ['6', '6'], ['7', '7'], ['8', '8'], ['9', '9']];
+for (const [key, label] of GESTURES) {
+  const b = document.createElement('button');
+  b.textContent = label;
+  b.title = `模拟在飞机前做「${key}」手势，程序用 EXT gesture? 读取`;
+  b.onclick = () => post('/api/sensor', { drone: selected, gesture: key });
+  $('gesturePad').appendChild(b);
+}
+for (const [key, label] of IR_KEYS) {
+  const b = document.createElement('button');
+  b.textContent = label;
+  b.onclick = () => post('/api/sensor', { drone: selected, ir: key });
+  $('irPad').appendChild(b);
+}
+$('huskyMode').onchange = (e) => sendCmd(`EXT husky mode ${e.target.value}`);
+$('ambient').onchange = (e) => post('/api/sensor', { ambient: Number(e.target.value) });
+$('ambient').oninput = (e) => { $('ambientVal').textContent = `${e.target.value} lux`; };
+
+const huskyCtx = $('huskyCanvas').getContext('2d');
+const HUSKY_COLORS = { color: '#f3a712', tag: '#4cc38a', face: '#9fc3ff' };
+function updateExtPanel(s) {
+  const x = s.ext;
+  if (!x) return;
+  $('xUltra').textContent = x.ultrasonic >= 999 ? '超量程' : `${x.ultrasonic} cm`;
+  $('xLight').textContent = `${x.light} lux`;
+  const [r, g, b, name] = x.color;
+  $('xColorSw').style.background = name === 'none' ? 'transparent' : `rgb(${r},${g},${b})`;
+  $('xColor').textContent = name === 'none' ? '太高测不到' : name;
+  $('xServo').textContent = `${Math.round(x.servo)}°`;
+  $('xGesture').textContent = x.gesture ? `● ${x.gesture}` : (x.pending.gesture ? `${x.pending.gesture} 个未读` : '');
+  $('xIr').textContent = x.ir ? `● ${x.ir}` : (x.pending.ir ? `${x.pending.ir} 个未读` : '');
+  if (document.activeElement !== $('huskyMode')) $('huskyMode').value = x.husky_mode;
+  if (worldData && document.activeElement !== $('ambient')) {
+    $('ambient').value = worldData.ambient ?? 500;
+    $('ambientVal').textContent = `${worldData.ambient ?? 500} lux`;
+  }
+  // HuskyLens 画面（320×240）
+  huskyCtx.fillStyle = '#0a0d10';
+  huskyCtx.fillRect(0, 0, 320, 240);
+  huskyCtx.strokeStyle = '#1f2832';
+  huskyCtx.strokeRect(160, 0, 0.5, 240); huskyCtx.strokeRect(0, 120, 320, 0.5);
+  const col = HUSKY_COLORS[x.husky_mode];
+  huskyCtx.lineWidth = 2;
+  huskyCtx.font = 'bold 14px Consolas, monospace';
+  for (const [id, cx, cy, w, h] of x.husky) {
+    huskyCtx.strokeStyle = col;
+    huskyCtx.strokeRect(cx - w / 2, cy - h / 2, w, h);
+    huskyCtx.fillStyle = col;
+    huskyCtx.fillText(`ID${id}`, cx - w / 2, Math.max(14, cy - h / 2 - 4));
+  }
+  $('huskyCount').textContent = x.husky.length ? `识别到 ${x.husky.length} 个` : '未识别到目标';
+}
+
 // ------------------------------------------------------------------ 设置窗口
 function renderSettings() {
   const n = Math.max(latest ? latest.max_drones : 4, 1);
@@ -696,7 +784,7 @@ function renderSettings() {
     };
     rows.appendChild(label);
   }
-  for (const key of ['trail', 'tofBeam', 'pip', 'hud']) {
+  for (const key of ['trail', 'tofBeam', 'pip', 'hud', 'ultraBeam']) {
     const box = $('set_' + key);
     box.checked = settings[key];
     box.onchange = () => { settings[key] = box.checked; saveSettings(); };

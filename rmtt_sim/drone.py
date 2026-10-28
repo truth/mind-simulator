@@ -10,6 +10,7 @@ import time
 from collections import deque
 
 from .matrix import COLORS, Matrix, TopLed, valid_pattern
+from .modules import ExtModules
 from .world import DRONE_HEIGHT, DRONE_RADIUS
 
 TAKEOFF_HEIGHT = 80.0   # cm
@@ -155,6 +156,7 @@ class Drone:
         self.ssid = "RMTT-SIM%03d" % (index + 1)
         self.matrix = Matrix()
         self.led = TopLed()
+        self.ext = ExtModules(self)
         self.client = None
         self.auto_land_timeout = 0.0
         self.peers = []  # 同一世界中的其他飞机（多机模式下互相碰撞）
@@ -189,6 +191,8 @@ class Drone:
         self.last_cmd_t = time.time()
         self.re_tag = None
         self.collision_t = 0.0
+        self.acc = (0.0, 0.0, 0.0)   # 世界系加速度（cm/s²，平滑后），用于 agx / agy / agz
+        self.ext.reset()
         self._collided = False
         self._landing = False
         self.matrix.reset()
@@ -246,9 +250,15 @@ class Drone:
         return 10 if h < 10 else int(h)
 
     def pad(self, wanted=None):
+        """当前识别到的挑战卡。mdirection：0 下视、1 前视（竖直贴墙的卡）、2 两者（优先下视）。"""
         if not self.mon:
             return None
-        return self.world.detect_pad(self.pos, wanted)
+        found = None
+        if self.mdirection in (0, 2):
+            found = self.world.detect_pad(self.pos, wanted)
+        if found is None and self.mdirection in (1, 2):
+            found = self.world.detect_pad_forward(self.pos, self.yaw, wanted)
+        return found
 
     def _pad_rel(self, pad):
         return (int(self.pos[0] - pad["x"]), int(self.pos[1] - pad["y"]), int(self.pos[2] - pad["z"]))
@@ -292,10 +302,15 @@ class Drone:
 
         self.yaw = _deg_norm(self.yaw)
         if dt > 0:
-            self.vel = _vmul(_vsub(self.pos, prev), 1.0 / dt)
+            vel = _vmul(_vsub(self.pos, prev), 1.0 / dt)
+            raw = _vmul(_vsub(vel, self.vel), 1.0 / dt)
+            k = min(1.0, dt * 8)
+            self.acc = tuple(a + (r - a) * k for a, r in zip(self.acc, raw))
+            self.vel = vel
         self._update_tilt(dt)
         self._update_power(dt)
         self.matrix.update(dt)
+        self.ext.update(dt)
 
         if (self.auto_land_timeout and self.flying and not self.task
                 and time.time() - self.last_cmd_t > self.auto_land_timeout):
@@ -419,7 +434,7 @@ class Drone:
             "temp?": "%d~%dC" % (t, t + 2),
             "attitude?": "pitch:%d;roll:%d;yaw:%d;" % (self._pitch(), self._roll(), int(self.yaw)),
             "baro?": "%.2f" % self._baro(),
-            "acceleration?": "agx:0.00;agy:0.00;agz:-999.00;",
+            "acceleration?": "agx:%.2f;agy:%.2f;agz:%.2f;" % self._accel(),
             "tof?": "%dmm" % (tof * 10),
         }
         if key not in table:
@@ -435,8 +450,25 @@ class Drone:
     def _roll(self):
         return int(self.tilt[1])
 
+    BARO_BASE = 50.0   # 起飞点气压高度（m）
+
     def _baro(self):
-        return 50.0 + self.pos[2] / 100.0
+        """气压高度（m），带 ±3cm 噪声。"""
+        return self.BARO_BASE + self.pos[2] / 100.0 + random.uniform(-0.03, 0.03)
+
+    def _accel(self):
+        """机体系加速度计读数（0.001g）：静止水平时约 (0, 0, -1000)，前加速时 agx 为正、向右为正 agy。"""
+        r = math.radians(self.yaw)
+        fwd = (math.cos(r), -math.sin(r))
+        rgt = (-math.sin(r), -math.cos(r))
+        ax, ay, az = self.acc
+        if self.falling:
+            az = -GRAVITY   # 自由落体时加速度计读数接近 0
+        scale = 1000.0 / GRAVITY
+        noise = lambda: random.uniform(-3, 3)   # noqa: E731
+        return ((ax * fwd[0] + ay * fwd[1]) * scale + noise(),
+                (ax * rgt[0] + ay * rgt[1]) * scale + noise(),
+                -(GRAVITY + az) * scale + noise())
 
     # ---- 控制类指令 ----
     def _require_flying(self):
@@ -681,6 +713,10 @@ class Drone:
         if not parts:
             return "error"
         key = parts[0].lower()
+        if self.ext.handles(key):
+            r = self.ext.handle(parts)
+            if r is not None:
+                return r
         if key == "tof?":
             return "tof %d" % self.tof_front_mm()
         if key == "version?":
@@ -783,11 +819,11 @@ class Drone:
         vx, vy, vz = (int(v / 10) for v in self.vel)
         return ("mid:%d;x:%d;y:%d;z:%d;mpry:0,0,%d;pitch:%d;roll:%d;yaw:%d;vgx:%d;vgy:%d;vgz:%d;"
                 "templ:%d;temph:%d;tof:%d;h:%d;bat:%d;baro:%.2f;time:%d;"
-                "agx:0.00;agy:0.00;agz:-999.00;\r\n") % (
+                "agx:%.2f;agy:%.2f;agz:%.2f;\r\n") % ((
             mid, px, py, pz, int(self.yaw), self._pitch(), self._roll(), int(self.yaw),
             vx, vy, vz, t, t + 2, self.tof_down_cm(),
             int(self.pos[2] - self.home_floor()), int(self.battery), self._baro(),
-            int(self.motor_time))
+            int(self.motor_time)) + self._accel())
 
     def to_dict(self):
         pad = self.pad()
@@ -806,6 +842,9 @@ class Drone:
             "client": "%s:%d" % self.client if self.client else None,
             "collision_age": round(time.time() - self.collision_t, 2) if self.collision_t else None,
             "matrix": self.matrix.to_dict(), "led": self.led.to_dict(),
+            "mdirection": self.mdirection,
+            "accel": [round(v) for v in self._accel()], "baro": round(self._baro(), 2),
+            "ext": self.ext.to_dict(),
         }
 
 

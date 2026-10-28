@@ -19,6 +19,7 @@
 - [Android 遥控 App](#android-遥控-app)
 - [双机模式：两部手机各控制一架](#双机模式两部手机各控制一架)
 - [支持的指令](#支持的指令)
+- [外接传感器模组](#外接传感器模组)
 - [工作原理](#工作原理)
 - [命令行参数](#命令行参数)
 - [常见问题](#常见问题)
@@ -144,6 +145,7 @@ python tools/patch_mindplus1x.py "F:/hos/tool/MindPlus_Win_V1.8.1_RC3.0"
 | `course` | 穿越门框赛道 | 三道门框组成 U 形赛道，四角各一张挑战卡 |
 | `pillars` | 圆柱森林 | 前方 1~4m 随机分布 12 根柱子，终点 m2 |
 | `room` | 室内房间 | 6m×4m 房间，侧墙有门，中央桌子可降落（桌面有 m2） |
+| `sensors` | 传感器练习场 | 外接模组练习：颜色卡 / 标签 / 人脸、地面彩色路线、悬空平台、墙上竖直挑战卡 m4 |
 
 **场景文件格式**（坐标单位 cm，X 前 / Y 左 / Z 上，`yaw` 俯视顺时针为正，`z` 为底面离地高度）：
 
@@ -156,7 +158,11 @@ python tools/patch_mindplus1x.py "F:/hos/tool/MindPlus_Win_V1.8.1_RC3.0"
     {"type": "cylinder", "x": 100, "y": 80, "z": 0, "r": 20, "h": 150, "color": "#669bbc"},
     {"type": "gate", "x": 300, "y": 0, "z": 0, "yaw": 0, "w": 100, "h": 150, "t": 8, "color": "#f3a712"}
   ],
-  "pads": [{"id": 1, "x": 0, "y": 0, "z": 0}]
+  "pads": [{"id": 1, "x": 0, "y": 0, "z": 0},
+           {"id": 4, "x": 150, "y": -250, "z": 90, "vertical": true, "yaw": -90}],
+  "targets": [{"kind": "color", "id": 1, "x": 250, "y": 0, "z": 86, "yaw": 180, "size": 20, "color": "#e4572e"}],
+  "zones": [{"x": 60, "y": 0, "w": 60, "d": 30, "yaw": 0, "color": "#e4572e"}],
+  "ambient": 600
 }
 ```
 
@@ -165,7 +171,10 @@ python tools/patch_mindplus1x.py "F:/hos/tool/MindPlus_Win_V1.8.1_RC3.0"
 | `box` 长方体 / 墙 | `w` 长（沿自身 X）、`d` 宽（沿自身 Y）、`h` 高、`yaw` 旋转 |
 | `cylinder` 圆柱 | `r` 半径、`h` 高 |
 | `gate` 门框 | `w` 门洞宽、`h` 门洞高、`t` 框粗、`yaw` 旋转（偏航 0° 时沿 X 方向穿过） |
-| `pads` 挑战卡 | `id` 编号 1~8，边长 20cm |
+| `pads` 挑战卡 | `id` 编号 1~8，边长 20cm；`vertical: true` 表示竖直贴墙（前视识别），`yaw` 为卡面朝向 |
+| `targets` 识别目标 | `kind`：`color` 颜色卡 / `tag` 标签 / `face` 人脸；`id` 1~99、`size` 边长、`z` 中心高度、`yaw` 卡面朝向 |
+| `zones` 地面色块 | `w` × `d`、`yaw`、`color`，供颜色传感器读取 |
+| `ambient` | 环境光照度（lux，默认 500），供光线传感器读取 |
 
 ## Android 遥控 App
 
@@ -281,6 +290,61 @@ App 会记住上次的地址；空闲时每 10 秒发送一次 `rc 0 0 0 0` 保�
 | 挑战卡不在下视视野内（高度 0.2~3m） | `error No valid marker` |
 | 动作被 `stop` / `emergency` 打断 | `error Interrupted` |
 
+## 外接传感器模组
+
+真机上，超声波、HuskyLens 等模组接在 RMTT 扩展板的引脚上，要在 ESP32 上运行自己写的程序才能使用，
+Mind+ 实时模式的积木里没有它们。模拟器相当于给扩展板装上了「自定义固件」，用一组 **EXT 指令**提供这些模组，
+**Python 程序、手机 App、网页 SDK 控制台**都可以直接调用（发往 8889 端口，和其他 SDK 指令一样）：
+
+| 模组 | 指令 | 回复 |
+|---|---|---|
+| 超声波测距（前向） | `EXT ultrasonic?` | `ultrasonic 123`（cm，2~400，超量程 `999`）。波束约 ±12°，比前向 ToF 宽、量程大 |
+| HuskyLens 二哈识图（前向） | `EXT husky mode color` / `tag` / `face` | `husky ok`（切换颜色 / 标签 / 人脸识别） |
+| | `EXT husky mode?` | `husky mode color` |
+| | `EXT husky?` | `husky 2 1,160,120,40,40 3,80,100,30,30`：数量，然后每个目标 `id,x,y,w,h`（320×240 画面，x/y 为中心，近的在前） |
+| | `EXT husky id 3?` | `husky 3,160,120,40,40` 或 `husky none` |
+| 光线传感器 | `EXT light?` | `light 523`（lux） |
+| 颜色传感器（朝下） | `EXT color?` | `color 230 57 46 red`：正下方表面的 RGB 与颜色名（red / orange / yellow / green / cyan / blue / purple / white / gray / black）；离表面超过 1.5m 返回 `color 0 0 0 none` |
+| 手势传感器 | `EXT gesture?` | `gesture up`：取出最早一个未读手势（up / down / left / right / forward / backward / clockwise / anticlockwise / wave），没有则 `gesture none` |
+| 红外接收 | `EXT ir?` | `ir FD08F7`：取出最早一个未读的遥控器编码（DFRobot 21 键遥控器 NEC 编码），没有则 `ir none` |
+| 舵机 | `EXT servo 90`（也可写 `EXT servo P1 90`） | `servo ok` / `servo error`（0~180°）；`EXT servo?` → `servo 90` |
+
+**场景与网页**：
+
+- **识别目标**：在场景编辑器中添加 **颜色卡 / 标签（AprilTag 样式）/ 人脸**，设置编号、大小、高度和朝向。HuskyLens 只识别视野内（水平约 60°）、
+  卡面朝向飞机、没有被障碍物挡住的目标；识别距离：颜色 2.5m、标签 3m、人脸 2m。
+- **地面色块**：编辑器中添加，颜色传感器飞过时读出颜色（挑战卡读作白色，障碍物顶面读作障碍物颜色）。
+- **光线**：场景环境光默认 500 lux，可在网页「外接模组」卡片中拖动调节；飞到悬空平台等遮挡物下方时只有约 35%。
+- **手势 / 红外**：网页「外接模组」卡片里有手势按钮和 21 键遥控器，点击即产生一个事件，程序用 `EXT gesture?` / `EXT ir?` 读取。
+- **舵机**：3D 模型机头下方的橙色摆臂随角度转动（0° 朝前、90° 朝下、180° 朝后）。
+- 网页「外接模组」卡片实时显示超声波、光线、下方颜色、舵机角度和 HuskyLens 画面（识别框 + ID）；⚙ 设置中可开启「超声波波束」显示。
+- 手机 App：「扩展模块」页切换到「外接传感器」，可读取 / 自动刷新各传感器、切换 HuskyLens 模式、读手势和红外、拖动舵机。
+- 内置场景「**传感器练习场**」放好了各类目标，可直接练习。
+
+Python 示例：
+
+```python
+import socket
+s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.settimeout(5)
+def send(c):
+    s.sendto(c.encode(), ("192.168.10.1", 8889)); return s.recvfrom(1024)[0].decode()
+
+send("command"); send("takeoff")
+send("EXT husky mode color")
+while True:
+    r = send("EXT husky id 1?")              # 找 1 号颜色卡
+    if r != "husky none":
+        x = int(r.split()[1].split(",")[1])
+        send("cw 15" if x > 180 else "ccw 15" if x < 140 else "forward 50")
+    if int(send("EXT ultrasonic?").split()[1]) < 60:
+        break
+send("land")
+```
+
+**机载传感器**（Mind+ 积木可直接读取）：加速度计 `agx/agy/agz` 按飞机实际加速度与机身朝向计算（悬停约 `0, 0, -1000`，单位 0.001g），
+气压高度 `baro` 随高度变化并带 ±3cm 噪声；`mdirection 0/1/2` 分别使用下视 / 前视 / 两个摄像头识别挑战卡，
+前视识别竖直贴在墙上的挑战卡（前方 0.3~2m、±35° 内、卡面朝向飞机）。
+
 ## 工作原理
 
 Mind+ 实时模式通过 **Tello SDK 3.0** 文本协议控制飞机：
@@ -389,6 +453,7 @@ rmtt_sim/                 模拟器（纯 Python 标准库）
   matrix.py               8×8 点阵与 RGB 灯
   world.py                场景几何：长方体 / 圆柱 / 门框、碰撞、ToF 射线检测
   scenes.py               场景库（加载 / 保存 / 删除）
+  modules.py              外接传感器模组（超声波 / HuskyLens / 光线 / 颜色 / 手势 / 红外 / 舵机）
   discovery.py            局域网自动发现（UDP 8899）
   simulator.py            仿真循环、UDP 8889/8890、局域网监听
   web.py                  HTTP API + SSE 推送给 3D 界面
@@ -413,12 +478,12 @@ dist/                     编译好的 APK（不纳入 git）
 ### 测试
 
 ```bash
-python -m unittest discover tests                 # 模拟器：指令、飞行、碰撞、ToF、挑战卡、场景、单双切换、自动发现、视频分片
+python -m unittest discover tests                 # 模拟器：指令、飞行、碰撞、ToF、挑战卡、场景、单双切换、自动发现、视频分片、外接模组
 python tools/video_check.py --png frame.png       # 视频流端到端自检（需模拟器与 3D 界面已打开）
 
 cd android
 set TT_SIM_HOST=192.168.0.107                      # 模拟器地址（模拟器需在运行；建议用单独的测试实例，避免干扰正在使用的飞机）
-gradlew.bat testDebugUnitTest                      # 连接测试 + 自动发现测试；模拟器未运行时联调部分自动跳过
+gradlew.bat testDebugUnitTest                      # 连接、外接模组指令与自动发现测试；模拟器未运行时联调部分自动跳过
 ```
 
 ### 编译 App
@@ -444,6 +509,9 @@ keyPassword=******
 
 ## 更新记录
 
+- **外接传感器模组**：通过 EXT 指令支持超声波、HuskyLens（颜色 / 标签 / 人脸）、光线、颜色、手势、红外遥控、舵机；
+  场景编辑器新增识别目标、地面色块、竖直挑战卡；网页「外接模组」面板与 App「外接传感器」页；内置「传感器练习场」。
+  机载加速度计与气压计按真实运动计算，`mdirection` 支持前视识别挑战卡。
 - **挑战卡航向旋转**：支持 `setyaw yaw mid`（Mind+「挑战卡航向旋转」积木），需先开启挑战卡探测；文档补充 Mind+ 中控制旋转角速度的方法。
 - **Mind+ 对接文档与调试工具**：新增 [docs/mindplus-integration.md](docs/mindplus-integration.md)（版本选择、连接机制、补丁原理与移植、`Re` 序号、视频链路、问题排查、扩展指南、代码位置速查）；新增 `tools/video_check.py`、`tools/mindplus_wfs_test/`。
 - **机载摄像头视频流**：`streamon` 后输出真机格式的 H.264 视频流到客户端 UDP 11111，Mind+「开启 Tello 摄像头」可显示模拟器画面；3D 界面最小化或被遮挡时继续推流；机载画面（画中画 / 视频流）不再显示 ToF 光束等辅助图形。

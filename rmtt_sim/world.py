@@ -58,11 +58,43 @@ def normalize_obstacle(o, idx=0):
 
 
 def normalize_pad(p):
+    """挑战卡。vertical=True 表示竖直贴在墙上（供前视摄像头识别），yaw 为卡面朝向。"""
     if not isinstance(p, dict):
         return None
-    return {"id": int(_num(p.get("id"), 1, 1, 8)),
-            "x": _num(p.get("x"), *_COORD), "y": _num(p.get("y"), *_COORD),
-            "z": _num(p.get("z"), 0, 0, 10000)}
+    out = {"id": int(_num(p.get("id"), 1, 1, 8)),
+           "x": _num(p.get("x"), *_COORD), "y": _num(p.get("y"), *_COORD),
+           "z": _num(p.get("z"), 0, 0, 10000)}
+    if p.get("vertical"):
+        out["vertical"] = True
+        out["yaw"] = _num(p.get("yaw"), 180, -360, 360)
+    return out
+
+
+TARGET_KINDS = ("color", "tag", "face")
+
+
+def normalize_target(t, idx=0):
+    """HuskyLens 识别目标：竖直的卡片。kind = color 颜色卡 / tag AprilTag 标签 / face 人脸；
+    (x, y, z) 为卡片中心（z 为中心离地高度），yaw 为卡面朝向，size 为边长（cm）。"""
+    if not isinstance(t, dict) or t.get("kind") not in TARGET_KINDS:
+        return None
+    c = t.get("color")
+    return {"kind": t["kind"], "id": int(_num(t.get("id"), 1, 1, 99)),
+            "x": _num(t.get("x"), *_COORD), "y": _num(t.get("y"), *_COORD),
+            "z": _num(t.get("z"), 100, 0, 10000), "yaw": _num(t.get("yaw"), 180, -360, 360),
+            "size": _num(t.get("size"), 20, 5, 200),
+            "color": c if isinstance(c, str) and _COLOR_RE.match(c) else PALETTE[idx % len(PALETTE)]}
+
+
+def normalize_zone(z, idx=0):
+    """地面色块（颜色传感器读取）：中心 (x, y)，尺寸 w × d，可旋转。"""
+    if not isinstance(z, dict):
+        return None
+    c = z.get("color")
+    return {"x": _num(z.get("x"), *_COORD), "y": _num(z.get("y"), *_COORD),
+            "w": _num(z.get("w"), 60, 5, 5000), "d": _num(z.get("d"), 60, 5, 5000),
+            "yaw": _num(z.get("yaw"), 0, -360, 360),
+            "color": c if isinstance(c, str) and _COLOR_RE.match(c) else PALETTE[idx % len(PALETTE)]}
 
 
 def normalize_scene(data):
@@ -71,9 +103,11 @@ def normalize_scene(data):
         raise ValueError("场景必须是 JSON 对象")
     obstacles = data.get("obstacles") or []
     pads = data.get("pads") or []
-    if not isinstance(obstacles, list) or not isinstance(pads, list):
-        raise ValueError("obstacles / pads 必须是数组")
-    if len(obstacles) > 500 or len(pads) > 64:
+    targets = data.get("targets") or []
+    zones = data.get("zones") or []
+    if not all(isinstance(x, list) for x in (obstacles, pads, targets, zones)):
+        raise ValueError("obstacles / pads / targets / zones 必须是数组")
+    if len(obstacles) > 500 or len(pads) > 64 or len(targets) > 200 or len(zones) > 200:
         raise ValueError("对象数量过多")
     start = data.get("start") or {}
     if not isinstance(start, dict):
@@ -86,6 +120,9 @@ def normalize_scene(data):
                   "yaw": _num(start.get("yaw"), 0, -360, 360)},
         "obstacles": [n for n in (normalize_obstacle(o, i) for i, o in enumerate(obstacles)) if n],
         "pads": [n for n in (normalize_pad(p) for p in pads) if n],
+        "targets": [n for n in (normalize_target(t, i) for i, t in enumerate(targets)) if n],
+        "zones": [n for n in (normalize_zone(z, i) for i, z in enumerate(zones)) if n],
+        "ambient": _num(data.get("ambient"), 500, 0, 2000),   # 环境光照度（lux），光线传感器使用
     }
 
 
@@ -217,6 +254,9 @@ class World:
         self.start = sc["start"]
         self.obstacles = sc["obstacles"]
         self.pads = sc["pads"]
+        self.targets = sc["targets"]
+        self.zones = sc["zones"]
+        self.ambient = sc["ambient"]
         if scene_id is not None:
             self.scene_id = scene_id
         if builtin is not None:
@@ -225,12 +265,15 @@ class World:
         self._rebuild()
 
     def _rebuild(self):
-        self._prims = [p for o in self.obstacles for p in obstacle_primitives(o)]
+        self._prims_by_obstacle = [obstacle_primitives(o) for o in self.obstacles]
+        self._prims = [p for prims in self._prims_by_obstacle for p in prims]
         self.version += 1
 
     def content(self):
         return {"title": self.title, "description": self.description, "start": dict(self.start),
-                "obstacles": [dict(o) for o in self.obstacles], "pads": [dict(p) for p in self.pads]}
+                "obstacles": [dict(o) for o in self.obstacles], "pads": [dict(p) for p in self.pads],
+                "targets": [dict(t) for t in self.targets], "zones": [dict(z) for z in self.zones],
+                "ambient": self.ambient}
 
     def add_obstacle(self, o):
         n = normalize_obstacle(o, len(self.obstacles))
@@ -283,6 +326,8 @@ class World:
         x, y, z = p
         best = None
         for pad in self.pads:
+            if pad.get("vertical"):
+                continue
             dz = z - pad["z"]
             if not 20 <= dz <= 300:
                 continue
@@ -294,6 +339,101 @@ class World:
             if best is None or dist < best[1]:
                 best = (pad, dist)
         return best[0] if best else None
+
+    def detect_pad_forward(self, p, yaw, wanted=None):
+        """前视摄像头识别竖直挑战卡：前方 30~200cm、±35° 视野内、卡面朝向飞机且无遮挡。"""
+        fx, fy = math.cos(math.radians(yaw)), -math.sin(math.radians(yaw))
+        best = None
+        for pad in self.pads:
+            if not pad.get("vertical") or (wanted is not None and pad["id"] != wanted):
+                continue
+            dx, dy, dz = pad["x"] - p[0], pad["y"] - p[1], pad["z"] - p[2]
+            ahead = dx * fx + dy * fy
+            side = abs(dx * fy - dy * fx)
+            if not 30 <= ahead <= 200 or side > ahead * math.tan(math.radians(35)) or abs(dz) > ahead * 0.6:
+                continue
+            nx, ny = math.cos(math.radians(pad["yaw"])), -math.sin(math.radians(pad["yaw"]))
+            if nx * -dx + ny * -dy <= 0:   # 卡面背对飞机
+                continue
+            if self._occluded(p, (pad["x"], pad["y"], pad["z"])):
+                continue
+            if best is None or ahead < best[1]:
+                best = (pad, ahead)
+        return best[0] if best else None
+
+    # ---- 外接传感器用到的环境查询 ----
+    def _occluded(self, a, b):
+        """a → b 的视线是否被障碍物挡住（b 前 2cm 内的命中不算，避免目标贴在墙上时误判）。"""
+        d = (b[0] - a[0], b[1] - a[1], b[2] - a[2])
+        dist = math.sqrt(d[0] ** 2 + d[1] ** 2 + d[2] ** 2)
+        if dist < 1e-6:
+            return False
+        hit = self.raycast(a, (d[0] / dist, d[1] / dist, d[2] / dist), dist)
+        return hit is not None and hit < dist - 2.0
+
+    def surface_below(self, x, y, z):
+        """(x, y) 处、不高于 z 的最上层表面：返回 (高度, 颜色 #rrggbb)。
+        依次考虑障碍物顶面、挑战卡、地面色块、地面。"""
+        best_h, color = 0.0, None
+        for o, prims in zip(self.obstacles, self._prims_by_obstacle):
+            for prim in prims:
+                if prim.z1 <= z + 1.0 and prim.z1 > best_h and prim.covers(x, y, 0.0):
+                    best_h, color = prim.z1, o["color"]
+        for pad in self.pads:
+            if (not pad.get("vertical") and best_h - 0.5 <= pad["z"] <= z + 1.0
+                    and abs(x - pad["x"]) < 10 and abs(y - pad["y"]) < 10):
+                return pad["z"], PAD_COLOR
+        if color is not None:
+            return best_h, color
+        for zone in reversed(self.zones):   # 后添加的色块盖在上面
+            r = math.radians(zone["yaw"])
+            dx, dy = x - zone["x"], y - zone["y"]
+            lx, ly = dx * math.cos(r) - dy * math.sin(r), dx * math.sin(r) + dy * math.cos(r)
+            if abs(lx) <= zone["w"] / 2 and abs(ly) <= zone["d"] / 2:
+                return 0.0, zone["color"]
+        return 0.0, GROUND_COLOR
+
+    def light_at(self, p):
+        """环境光照度（lux）：头顶有遮挡（障碍物底面高于飞机）时只有约 35%。"""
+        for prim in self._prims:
+            if prim.z0 > p[2] + 5 and prim.covers(p[0], p[1], 0.0):
+                return self.ambient * 0.35
+        return self.ambient
+
+    def camera_view(self, cam, yaw, kinds, hfov=60.0, vfov=45.0, max_dist=300.0, width=320, height=240):
+        """把识别目标投影到前视相机画面（width × height 像素），返回 [(target, cx, cy, w, h, 距离cm)]，近的在前。
+        只返回在视野内、卡面大致朝向相机、距离 20~max_dist 且无遮挡的目标。"""
+        r = math.radians(yaw)
+        fx, fy = math.cos(r), -math.sin(r)     # 前
+        rx, ry = -math.sin(r), -math.cos(r)    # 右（俯视顺时针 90°）
+        th, tv = math.tan(math.radians(hfov / 2)), math.tan(math.radians(vfov / 2))
+        out = []
+        for t in self.targets:
+            if t["kind"] not in kinds:
+                continue
+            dx, dy, dz = t["x"] - cam[0], t["y"] - cam[1], t["z"] - cam[2]
+            depth = dx * fx + dy * fy
+            if not 20 <= depth <= max_dist:
+                continue
+            nx, ny = math.cos(math.radians(t["yaw"])), -math.sin(math.radians(t["yaw"]))
+            if nx * -dx + ny * -dy <= 0.25 * math.hypot(dx, dy):   # 卡面需大致朝向相机
+                continue
+            u = (dx * rx + dy * ry) / (depth * th)    # -1 左 ~ 1 右
+            v = -dz / (depth * tv)                    # -1 上 ~ 1 下
+            if abs(u) > 1 or abs(v) > 1:
+                continue
+            if self._occluded(cam, (t["x"], t["y"], t["z"])):
+                continue
+            pw = t["size"] / (depth * th) * width / 2
+            ph = t["size"] / (depth * tv) * height / 2
+            out.append((t, round((u + 1) * width / 2), round((v + 1) * height / 2),
+                        max(1, round(pw)), max(1, round(ph)), depth))
+        out.sort(key=lambda x: x[5])
+        return out
+
+
+GROUND_COLOR = "#9fb08a"
+PAD_COLOR = "#e9e9e4"
 
 
 def box(x, y, w, d, h, z=0.0, color=None, yaw=0.0):

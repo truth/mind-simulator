@@ -232,3 +232,105 @@ class VideoTest(unittest.TestCase):
         sps, prefix, idr = b"\x00\x00\x00\x01\x67AB", b"\x00\x00\x00\x01\x6e\x01\x02", b"\x00\x00\x01\x65CD"
         self.assertEqual(strip_svc_nal(sps + prefix + idr), sps + idr)
         self.assertEqual(strip_svc_nal(b"raw"), b"raw")
+
+
+class SensorModuleTest(unittest.TestCase):
+    """外接模组与机载传感器。"""
+
+    def make(self, **scene):
+        w = World(scene)
+        d = Drone(0, "127.0.0.1", w, lambda *a: None)
+        out = []
+
+        def send(c):
+            out.clear()
+            d.handle(c, out.append)
+            for _ in range(20000):
+                if out or not d.task:
+                    break
+                d.update(0.02)
+            return out[0] if out else None
+        return w, d, send
+
+    def test_ultrasonic_cone_and_range(self):
+        w, d, send = self.make(obstacles=[{"type": "box", "x": 200, "y": 0, "w": 20, "d": 300, "h": 300}])
+        send("takeoff")
+        self.assertEqual(send("EXT ultrasonic?"), "ultrasonic 184")   # 墙面 x=190，传感器在机头前 6cm
+        send("cw 180")
+        self.assertEqual(send("EXT ultrasonic?"), "ultrasonic 999")
+        # 偏离正前方 10° 的柱子：窄波束的 ToF 测不到，锥形波束的超声波可以
+        w2, d2, send2 = self.make(obstacles=[{"type": "cylinder", "x": 150, "y": -24, "r": 8, "h": 300}])
+        send2("takeoff")
+        self.assertEqual(send2("EXT tof?"), "tof 8192")
+        self.assertNotEqual(send2("EXT ultrasonic?"), "ultrasonic 999")
+
+    def test_husky_modes_occlusion_and_facing(self):
+        targets = [
+            {"kind": "color", "id": 1, "x": 200, "y": 0, "z": 86, "yaw": 180, "size": 20, "color": "#ff0000"},
+            {"kind": "tag", "id": 7, "x": 200, "y": 50, "z": 80, "yaw": 180, "size": 20},
+            {"kind": "face", "id": 2, "x": 200, "y": -50, "z": 80, "yaw": 0, "size": 20},   # 背对飞机
+        ]
+        w, d, send = self.make(targets=targets)
+        send("takeoff")
+        r = send("EXT husky?").split()
+        self.assertEqual(r[:2], ["husky", "1"])
+        tid, x, y, bw, bh = map(int, r[2].split(","))
+        self.assertEqual(tid, 1)
+        self.assertAlmostEqual(x, 160, delta=3)      # 正前方 → 画面中央
+        self.assertAlmostEqual(y, 120, delta=3)
+        self.assertGreater(bw, 10)
+        self.assertEqual(send("EXT husky mode tag"), "husky ok")
+        r = send("EXT husky id 7?")
+        self.assertTrue(r.startswith("husky 7,"))
+        self.assertLess(int(r.split(",")[1]), 160)   # 标签在左边（+Y）→ 画面左半
+        self.assertEqual(send("EXT husky mode face"), "husky ok")
+        self.assertEqual(send("EXT husky?"), "husky 0")   # 人脸背对飞机
+        self.assertEqual(send("EXT husky mode xyz"), "husky error")
+        # 中间放一面墙挡住颜色卡
+        w.set_content({"targets": targets, "obstacles": [{"type": "box", "x": 120, "y": 0, "w": 10, "d": 60, "h": 200}]})
+        send("EXT husky mode color")
+        self.assertEqual(send("EXT husky?"), "husky 0")
+
+    def test_light_color_and_events(self):
+        w, d, send = self.make(ambient=800, zones=[{"x": 0, "y": 0, "w": 60, "d": 60, "color": "#2060ff"}],
+                               obstacles=[{"type": "box", "x": 300, "y": 0, "w": 100, "d": 100, "h": 20, "z": 150}])
+        self.assertAlmostEqual(int(send("EXT light?").split()[1]), 800, delta=20)
+        self.assertEqual(send("EXT color?").split()[-1], "blue")
+        send("takeoff")
+        send("forward 300")                    # 飞到悬空平台下方：变暗
+        self.assertLess(int(send("EXT light?").split()[1]), 320)
+        self.assertEqual(send("EXT gesture?"), "gesture none")
+        d.ext.push_gesture("up")
+        d.ext.push_gesture("wave")
+        self.assertEqual(send("EXT gesture?"), "gesture up")
+        self.assertEqual(send("EXT gesture?"), "gesture wave")
+        d.ext.push_ir("1")
+        self.assertEqual(send("EXT ir?"), "ir FD08F7")
+        self.assertEqual(send("EXT ir?"), "ir none")
+        with self.assertRaises(ValueError):
+            d.ext.push_gesture("jump")
+
+    def test_servo(self):
+        w, d, send = self.make()
+        self.assertEqual(send("EXT servo 30"), "servo ok")
+        self.assertEqual(send("EXT servo P1 200"), "servo error")
+        self.assertEqual(send("EXT servo?"), "servo 30")
+        for _ in range(50):
+            d.update(0.02)
+        self.assertAlmostEqual(d.ext.servo, 30, delta=0.01)
+
+    def test_forward_pad_and_accel(self):
+        w, d, send = self.make(pads=[{"id": 5, "x": 150, "y": 0, "z": 80, "vertical": True, "yaw": 180}])
+        send("takeoff")
+        send("mon")
+        self.assertIn("mid:-1;", d.state_string())          # 默认只用下视
+        send("mdirection 1")
+        self.assertTrue(d.state_string().startswith("mid:5;"))
+        send("cw 180")
+        self.assertIn("mid:-1;", d.state_string())          # 背对卡片
+        # 加速度计：悬停时 agz ≈ -1000
+        for _ in range(50):
+            d.update(0.02)
+        agx, agy, agz = d._accel()
+        self.assertAlmostEqual(agz, -1000, delta=15)
+        self.assertAlmostEqual(agx, 0, delta=15)

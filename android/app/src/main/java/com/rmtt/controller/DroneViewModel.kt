@@ -110,6 +110,7 @@ class DroneViewModel(app: Application) : AndroidViewModel(app) {
         }
         viewModelScope.launch(Dispatchers.IO) { rcLoop() }
         viewModelScope.launch { tofLoop() }
+        viewModelScope.launch { sensorLoop() }
     }
 
     /** 支持 "192.168.0.107:8889" 写法。 */
@@ -137,6 +138,7 @@ class DroneViewModel(app: Application) : AndroidViewModel(app) {
 
     fun disconnect() {
         autoTof = false
+        autoSensors = false
         serial = null
         client.disconnect()
     }
@@ -185,6 +187,72 @@ class DroneViewModel(app: Application) : AndroidViewModel(app) {
                 zeroSent = 0
                 client.sendNow("rc $a $b $c $d")
             }
+        }
+    }
+
+    // ---- 外接传感器模组（EXT 自定义指令，见 README「外接传感器模组」） ----
+    data class HuskyBox(val id: Int, val x: Int, val y: Int, val w: Int, val h: Int)
+
+    var ultrasonic by mutableStateOf<Int?>(null)
+        private set
+    var light by mutableStateOf<Int?>(null)
+        private set
+    var groundColor by mutableStateOf<Pair<Int, String>?>(null)   // (0xRRGGBB, 颜色名)
+        private set
+    var huskyMode by mutableStateOf("color")
+    val husky = mutableStateListOf<HuskyBox>()
+    var gesture by mutableStateOf<String?>(null)
+        private set
+    var irCode by mutableStateOf<String?>(null)
+        private set
+    var servoAngle by mutableFloatStateOf(90f)
+    var autoSensors by mutableStateOf(false)
+
+    /** 读取超声波、光线、颜色、HuskyLens（quiet = 后台轮询不写日志） */
+    fun readSensors(quiet: Boolean = false) {
+        viewModelScope.launch {
+            fun num(r: String, prefix: String) = r.removePrefix(prefix).trim().split(" ").firstOrNull()?.toIntOrNull()
+            num(client.send("EXT ultrasonic?", quiet = quiet), "ultrasonic")?.let { ultrasonic = it }
+            num(client.send("EXT light?", quiet = quiet), "light")?.let { light = it }
+            val c = client.send("EXT color?", quiet = quiet).removePrefix("color").trim().split(" ")
+            if (c.size >= 4) {
+                val rgb = c.take(3).mapNotNull { it.toIntOrNull() }
+                if (rgb.size == 3) groundColor = ((rgb[0] shl 16) or (rgb[1] shl 8) or rgb[2]) to c[3]
+            }
+            val h = client.send("EXT husky?", quiet = quiet)
+            if (h.startsWith("husky ")) {
+                husky.clear()
+                h.split(" ").drop(2).forEach { g ->
+                    val v = g.split(",").mapNotNull { it.toIntOrNull() }
+                    if (v.size == 5) husky.add(HuskyBox(v[0], v[1], v[2], v[3], v[4]))
+                }
+            }
+        }
+    }
+
+    fun setHusky(mode: String) {
+        huskyMode = mode
+        viewModelScope.launch {
+            client.send("EXT husky mode $mode")
+            readSensors(quiet = true)
+        }
+    }
+
+    /** 手势 / 红外是"事件"：每次读取取走一个，不做自动轮询，以免和用户程序抢事件 */
+    fun readGesture() {
+        viewModelScope.launch { gesture = client.send("EXT gesture?").removePrefix("gesture").trim() }
+    }
+
+    fun readIr() {
+        viewModelScope.launch { irCode = client.send("EXT ir?").removePrefix("ir").trim() }
+    }
+
+    fun sendServo() = cmd("EXT servo ${servoAngle.roundToInt()}")
+
+    private suspend fun sensorLoop() {
+        while (viewModelScope.isActive) {
+            delay(700)
+            if (autoSensors && client.connected.value && client.isIdle) readSensors(quiet = true)
         }
     }
 

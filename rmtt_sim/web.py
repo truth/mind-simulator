@@ -139,6 +139,19 @@ def make_handler(sim):
                     with sim.lock:
                         for d in sim.drones:
                             d.battery = 100.0
+                elif path == "/api/sensor":
+                    # 网页模拟的外部事件：对飞机挥手（手势）、按红外遥控器、调节环境光
+                    with sim.lock:
+                        if "ambient" in data:
+                            sim.world.ambient = max(0.0, min(2000.0, float(data["ambient"])))
+                            sim.world.dirty = True
+                            sim.world.version += 1   # 让网页 / 编辑器重新拉取场景，避免旧值覆盖
+                        else:
+                            ext = sim.drones[int(data.get("drone", 0))].ext
+                            if "gesture" in data:
+                                ext.push_gesture(str(data["gesture"]))
+                            if "ir" in data:
+                                ext.push_ir(str(data["ir"]))
                 elif path == "/api/obstacle":
                     with sim.lock:
                         sim.world.add_obstacle(dict(data, type=data.get("type", "box")))

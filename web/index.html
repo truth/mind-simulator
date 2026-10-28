@@ -86,6 +86,29 @@
         </div>
       </div>
 
+      <div class="card" id="extCard">
+        <h3>外接模组 <small>EXT 指令读取，见 README</small></h3>
+        <div class="grid">
+          <div><span>超声波</span><b id="xUltra">-</b></div>
+          <div><span>光线</span><b id="xLight">-</b></div>
+          <div><span>下方颜色</span><b><i class="sw" id="xColorSw"></i><span id="xColor">-</span></b></div>
+          <div><span>舵机</span><b id="xServo">-</b></div>
+        </div>
+        <div class="ext-sub">
+          <span>HuskyLens</span>
+          <select id="huskyMode" title="切换识别模式（发送 EXT husky mode …）">
+            <option value="color">颜色识别</option><option value="tag">标签识别</option><option value="face">人脸识别</option>
+          </select>
+          <span id="huskyCount" class="muted"></span>
+        </div>
+        <canvas id="huskyCanvas" width="320" height="240"></canvas>
+        <div class="ext-sub"><span>对飞机做手势</span><span id="xGesture" class="event"></span></div>
+        <div class="pad-grid" id="gesturePad"></div>
+        <div class="ext-sub"><span>红外遥控器</span><span id="xIr" class="event"></span></div>
+        <div class="pad-grid ir" id="irPad"></div>
+        <div class="ext-sub"><span>环境光</span><input type="range" id="ambient" min="0" max="2000" step="10"><span id="ambientVal" class="muted"></span></div>
+      </div>
+
       <div class="card console">
         <h3>SDK 控制台 <small>（不用 Mind+ 也能直接测试）</small></h3>
         <div class="quick">
@@ -135,6 +158,10 @@
           <button data-add="cylinder"><b>◯</b>圆柱</button>
           <button data-add="gate"><b>⊓</b>门框</button>
           <button data-add="pad"><b>▣</b>挑战卡</button>
+          <button data-add="colorcard" title="HuskyLens 颜色识别目标"><b>■</b>颜色卡</button>
+          <button data-add="tag" title="HuskyLens 标签识别目标（AprilTag）"><b>▦</b>标签</button>
+          <button data-add="face" title="HuskyLens 人脸识别目标"><b>☺</b>人脸</button>
+          <button data-add="zone" title="地面色块：颜色传感器读取"><b>▬</b>地面色块</button>
         </div>
         <label class="chk"><input type="checkbox" id="snap" checked> 吸附（10cm / 15°）</label>
       </div>
@@ -178,6 +205,7 @@
           <label class="chk"><input type="checkbox" id="set_tofBeam"> ToF 光束</label>
           <label class="chk"><input type="checkbox" id="set_pip"> 机载摄像头画面（左下角）</label>
           <label class="chk"><input type="checkbox" id="set_hud"> 飞行状态（左上角）</label>
+          <label class="chk"><input type="checkbox" id="set_ultraBeam"> 超声波波束</label>
         </div>
       </section>
       <section>

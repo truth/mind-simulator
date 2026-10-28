@@ -29,6 +29,8 @@ class TelloClientSimulatorTest {
         client = TelloClient(scope)
         val ok = runBlocking { client.connect(host, 8889) }
         assumeTrue("模拟器未运行，跳过联调测试", ok)
+        // 从已知状态开始：飞机若还在空中（上次测试或手动操作遗留），先降落
+        runBlocking { client.send("land") }
     }
 
     @After
@@ -67,6 +69,20 @@ class TelloClientSimulatorTest {
         val h = client.state.value.height
         assertTrue("rc 上升后高度应明显高于 80cm，实际 $h", h > 100)
         assertEquals("ok", client.send("land"))
+    }
+
+    @Test
+    fun externalSensorModules() = runBlocking {
+        assertTrue(client.send("EXT ultrasonic?").matches(Regex("""ultrasonic \d+""")))
+        assertTrue(client.send("EXT light?").matches(Regex("""light \d+""")))
+        assertTrue(client.send("EXT color?").matches(Regex("""color \d+ \d+ \d+ \w+""")))
+        assertEquals("husky ok", client.send("EXT husky mode tag"))
+        assertTrue(client.send("EXT husky?").startsWith("husky "))
+        assertEquals("servo ok", client.send("EXT servo 45"))
+        assertEquals("servo 45", client.send("EXT servo?"))
+        assertEquals("gesture none", client.send("EXT gesture?"))
+        assertEquals("ir none", client.send("EXT ir?"))
+        assertEquals("husky ok", client.send("EXT husky mode color"))
     }
 
     @Test
